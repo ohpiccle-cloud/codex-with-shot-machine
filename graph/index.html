@@ -13,6 +13,8 @@
       <button id="connect">아두이노 연결</button>
     </header>
     <p id="connection" role="status">USB로 보드를 연결한 뒤 아두이노 연결을 누르세요.</p>
+    <div class="workspace">
+    <div class="live-panel">
     <section class="metrics" aria-label="추출 상태">
       <div><span>현재 압력</span><strong><b id="pressure">—</b> <small>bar</small></strong></div>
       <div><span>추출 시간</span><strong><b id="elapsed">0.0</b> <small>초</small></strong></div>
@@ -32,7 +34,20 @@
     </footer>
     <p id="save-status" role="status" class="note">추출 완료 후 저장하면 프로그램 폴더의 data 폴더에 날짜_추출번호.png로 보관됩니다.</p>
     <p class="note">완료된 그래프는 다음 추출이 시작될 때 초기화됩니다. 자동 재시작은 압력이 0.1bar 이하로 내려간 뒤 다시 초과할 때 동작합니다. 보드 연결이 끊기면 기록이 종료됩니다.</p>
+    </div>
+    <aside class="history" aria-labelledby="history-title">
+      <div class="history-heading"><h2 id="history-title">추출 히스토리</h2><button id="history-refresh" class="secondary">새로고침</button></div>
+      <p id="history-status" class="note" role="status">저장된 추출 기록을 불러오는 중…</p>
+      <div id="history-list" class="history-list"></div>
+    </aside>
+    </div>
   </main>
+  <dialog id="history-preview" aria-labelledby="preview-title">
+    <div class="preview-heading"><h2 id="preview-title">추출 기록</h2><button id="preview-close" class="secondary">닫기</button></div>
+    <p id="preview-status" class="note" role="status"></p>
+    <img id="preview-image" alt="저장된 추출 그래프와 메모">
+    <a id="preview-download" class="image-link" download>이미지 다운로드</a>
+  </dialog>
   <script type="module" src="app.mjs"></script>
 </body>
 </html>

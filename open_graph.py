@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 
 GRAPH_DIRECTORY = Path(__file__).resolve().parent / 'graph'
 DATA_DIRECTORY = Path(__file__).resolve().parent / 'data'
+RECORD_NAME = re.compile(r'(\d{4}-\d{2}-\d{2})_(\d+)\.png')
 
 
 class GraphHandler(SimpleHTTPRequestHandler):
@@ -25,8 +26,50 @@ class GraphHandler(SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(body)
+
+    def do_GET(self):
+        path = urlsplit(self.path).path
+        directory = self.server.data_directory
+        if path == '/api/extractions':
+            try:
+                records = []
+                if directory.exists():
+                    for file in directory.iterdir():
+                        match = RECORD_NAME.fullmatch(file.name)
+                        if match and not file.is_symlink() and file.is_file():
+                            records.append({'filename': file.name, 'date': match.group(1),
+                                            'number': int(match.group(2)),
+                                            'url': '/api/extractions/files/' + file.name})
+                records.sort(key=lambda record: (record['date'], record['number']), reverse=True)
+                self.respond_json(200, {'records': records})
+            except OSError:
+                self.respond_json(500, {'error': 'data 폴더를 읽지 못했습니다. 폴더 접근 권한을 확인해주세요.'})
+            return
+        if path.startswith('/api/extractions/files/'):
+            filename = path[len('/api/extractions/files/'):]
+            if not RECORD_NAME.fullmatch(filename):
+                self.respond_json(404, {'error': '추출 기록을 찾을 수 없습니다.'})
+                return
+            file = directory / filename
+            try:
+                if file.is_symlink() or not file.is_file():
+                    self.respond_json(404, {'error': '추출 기록을 찾을 수 없습니다.'})
+                    return
+                image = file.read_bytes()
+            except OSError:
+                self.respond_json(404, {'error': '추출 이미지를 읽지 못했습니다.'})
+                return
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.send_header('Content-Length', str(len(image)))
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(image)
+            return
+        super().do_GET()
 
     def do_POST(self):
         address = urlsplit(self.path)

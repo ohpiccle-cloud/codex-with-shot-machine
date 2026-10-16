@@ -1,7 +1,24 @@
 :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #e6edf6; background: #10161f; }
 * { box-sizing: border-box; }
 body { margin: 0; }
-main { max-width: 1150px; padding: 40px 28px; margin: auto; }
+main { max-width: 1550px; padding: 40px 28px; margin: auto; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.live-panel { min-width: 0; }
+.history { position: sticky; top: 20px; margin-top: 24px; padding: 18px; border: 1px solid #2b394b; border-radius: 12px; background: #192331; }
+.history-heading, .preview-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.history-heading h2, .preview-heading h2 { font-size: 18px; margin: 0; }
+.history-heading button { padding: 8px 10px; font-size: 12px; }
+.history-list { display: grid; gap: 12px; max-height: 70vh; overflow-y: auto; }
+.history-card { display: grid; gap: 8px; width: 100%; text-align: left; padding: 10px; color: #e6edf6; background: #10161f; border-color: #2b394b; }
+.history-card:hover { border-color: #74d6bf; }
+.history-card img { width: 100%; height: 125px; object-fit: contain; background: #192331; border-radius: 5px; }
+.history-card small { color: #a6b6c9; font-weight: 400; }
+dialog { width: min(1100px, 95vw); max-height: 92vh; overflow: auto; padding: 20px; background: #192331; color: #e6edf6; border: 1px solid #42526a; border-radius: 12px; }
+dialog::backdrop { background: #080d15cc; }
+.preview-heading { position: sticky; top: -20px; padding: 12px 0; background: #192331; }
+#preview-image { width: 100%; display: block; margin: 16px 0; }
+.image-link { color: #74d6bf; }
+@media (max-width: 1000px) { .workspace { grid-template-columns: minmax(0, 1fr); } .history { position: static; margin-top: 0; } .history-list { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); max-height: 500px; } }
 header, footer, .actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 h1 { font-size: 32px; margin: 4px 0 12px; }
 .eyebrow { color: #7dd3c4; font-size: 12px; letter-spacing: 2px; }

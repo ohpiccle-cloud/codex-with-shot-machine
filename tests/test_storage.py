@@ -60,6 +60,37 @@ class StorageTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, expected)
         self.assertFalse(self.directory.exists())
 
+    def history(self):
+        with urllib.request.urlopen(self.url + '/api/extractions') as response:
+            self.assertEqual(response.headers['Cache-Control'], 'no-store')
+            return json.load(response)['records']
+
+    def test_history_empty_and_existing_files_sorted_by_date_and_number(self):
+        self.assertEqual(self.history(), [])
+        self.directory.mkdir()
+        for filename in ['2026-10-16_002.png', '2026-10-17_001.png',
+                         '2026-10-16_1000.png', '2026-10-16_999.png', 'other.png', '.gitkeep']:
+            (self.directory / filename).write_bytes(PNG)
+        records = self.history()
+        self.assertEqual([r['filename'] for r in records], [
+            '2026-10-17_001.png', '2026-10-16_1000.png', '2026-10-16_999.png', '2026-10-16_002.png'])
+        with urllib.request.urlopen(self.url + records[0]['url']) as response:
+            self.assertEqual(response.headers['Content-Type'], 'image/png')
+            self.assertEqual(response.read(), PNG)
+        self.save('2026-10-18')
+        self.assertEqual(self.history()[0]['filename'], '2026-10-18_001.png')
+
+    def test_history_does_not_expose_other_files_or_symlinks(self):
+        self.directory.mkdir()
+        outside = Path(self.temporary.name) / 'private.png'
+        outside.write_bytes(PNG)
+        (self.directory / '2026-10-16_001.png').symlink_to(outside)
+        self.assertEqual(self.history(), [])
+        for filename in ['2026-10-16_001.png', '..%2Fprivate.png', 'missing.png']:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(self.url + '/api/extractions/files/' + filename)
+            self.assertEqual(error.exception.code, 404)
+
 
 if __name__ == '__main__':
     unittest.main()

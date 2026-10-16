@@ -92,6 +92,7 @@ function toggleRecording() {
 
 $('toggle').addEventListener('click', toggleRecording);
 window.addEventListener('keydown', event => {
+  if ($('history-preview').open || event.target.closest('.history')) return;
   if (event.code !== 'Space' || event.target.closest('input, textarea, select, [contenteditable]')) return;
   event.preventDefault();
   if (!event.repeat) toggleRecording();
@@ -206,6 +207,7 @@ $('download').addEventListener('click', async () => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || '파일을 저장하지 못했습니다.');
     $('save-status').textContent = `저장 완료: ${result.path}`;
+    await loadHistory();
   } catch (error) {
     $('save-status').textContent = `저장 실패: ${error.message}`;
   } finally {
@@ -214,9 +216,62 @@ $('download').addEventListener('click', async () => {
   }
 });
 
+let historyRequest = 0;
+
+async function loadHistory() {
+  const request = ++historyRequest;
+  $('history-refresh').disabled = true;
+  $('history-status').textContent = '저장된 추출 기록을 불러오는 중…';
+  try {
+    const response = await fetch('/api/extractions', { cache: 'no-store' });
+    if (response.status === 404 || response.status === 501) {
+      throw new Error('최신 Open_Graph.bat로 다시 실행해주세요.');
+    }
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || '기록을 읽지 못했습니다.');
+    if (request !== historyRequest) return;
+    const list = document.createDocumentFragment();
+    for (const record of result.records) {
+      const button = document.createElement('button');
+      button.className = 'history-card';
+      const title = `${record.date} · 추출 #${String(record.number).padStart(3, '0')}`;
+      button.setAttribute('aria-label', `${title} 보기`);
+      const image = document.createElement('img');
+      image.src = record.url; image.alt = ''; image.loading = 'lazy';
+      const label = document.createElement('span'); label.textContent = title;
+      const hint = document.createElement('small'); hint.textContent = '그래프와 메모 보기';
+      button.append(image, label, hint);
+      button.addEventListener('click', () => {
+        $('preview-title').textContent = title;
+        $('preview-status').textContent = '';
+        $('preview-image').src = record.url;
+        $('preview-download').href = record.url;
+        $('preview-download').download = record.filename;
+        $('history-preview').showModal();
+      });
+      list.append(button);
+    }
+    $('history-list').replaceChildren(list);
+    $('history-status').textContent = result.records.length
+      ? `저장된 기록 ${result.records.length}개 · 최신순`
+      : '저장된 기록이 없습니다. 추출 완료 후 이미지 저장을 눌러주세요.';
+  } catch (error) {
+    if (request === historyRequest) $('history-status').textContent = `불러오기 실패: ${error.message}`;
+  } finally {
+    if (request === historyRequest) $('history-refresh').disabled = false;
+  }
+}
+
+$('history-refresh').addEventListener('click', loadHistory);
+$('preview-close').addEventListener('click', () => $('history-preview').close());
+$('preview-image').addEventListener('error', () => {
+  $('preview-status').textContent = '이미지를 읽지 못했습니다. 파일이 삭제되거나 이동했는지 확인하고 히스토리를 새로고침하세요.';
+});
+
 if (!('serial' in navigator) || !window.isSecureContext) {
   $('connect').disabled = true;
   $('connection').textContent = 'PC용 Chrome 또는 Edge에서 localhost로 열어주세요. 이 브라우저에서는 USB 시리얼 연결을 지원하지 않습니다.';
 }
 setInterval(refresh, 100);
 refresh();
+loadHistory();
