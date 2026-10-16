@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>추출 압력 그래프</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">SHOT · PRESSURE MONITOR</p><h1>추출 그래프</h1></div>
+      <button id="connect">아두이노 연결</button>
+    </header>
+    <p id="connection" role="status">USB로 보드를 연결한 뒤 아두이노 연결을 누르세요.</p>
+    <section class="metrics" aria-label="추출 상태">
+      <div><span>현재 압력</span><strong><b id="pressure">—</b> <small>bar</small></strong></div>
+      <div><span>추출 시간</span><strong><b id="elapsed">0.0</b> <small>초</small></strong></div>
+      <div><span>상태</span><strong id="state">대기 중</strong></div>
+    </section>
+    <section class="chart">
+      <canvas id="graph" role="img" aria-label="X축은 추출 시간(초), Y축은 추출 압력(bar)인 실시간 그래프"></canvas>
+    </section>
+    <footer>
+      <p>압력 <b>0.1bar 초과</b> 또는 <kbd>Space</kbd>로 시작 · 추출 중 <kbd>Space</kbd>로 완료</p>
+      <div class="actions"><button id="toggle" disabled>추출 시작 (Space)</button><button id="download" class="secondary" disabled>CSV 저장</button></div>
+    </footer>
+    <p class="note">완료된 그래프는 다음 추출이 시작될 때 초기화됩니다. 자동 재시작은 압력이 0.1bar 이하로 내려간 뒤 다시 초과할 때 동작합니다. 보드 연결이 끊기면 기록이 종료됩니다.</p>
+  </main>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>
