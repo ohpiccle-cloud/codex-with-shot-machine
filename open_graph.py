@@ -1,17 +1,96 @@
 """Open the local pressure graph using only the Python standard library."""
 
 import argparse
+from datetime import date
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import os
+import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import threading
 import webbrowser
+from urllib.parse import parse_qs, urlsplit
 
 
 GRAPH_DIRECTORY = Path(__file__).resolve().parent / 'graph'
+DATA_DIRECTORY = Path(__file__).resolve().parent / 'data'
+
+
+class GraphHandler(SimpleHTTPRequestHandler):
+    def respond_json(self, status, payload):
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        address = urlsplit(self.path)
+        if address.path != '/api/extractions':
+            self.respond_json(404, {'error': '저장 경로를 찾을 수 없습니다.'})
+            return
+        hosts = {'127.0.0.1:{}'.format(self.server.server_port),
+                 'localhost:{}'.format(self.server.server_port)}
+        origin = self.headers.get('Origin')
+        if (self.headers.get('Host') not in hosts
+                or self.headers.get('X-Shot-Save') != '1'
+                or (origin is not None and origin not in {'http://' + host for host in hosts})):
+            self.respond_json(403, {'error': '이 프로그램 화면에서만 저장할 수 있습니다.'})
+            return
+        try:
+            extraction_date = parse_qs(address.query).get('date', [''])[0]
+            if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', extraction_date):
+                raise ValueError('Invalid date')
+            date.fromisoformat(extraction_date)
+            length = int(self.headers.get('Content-Length', '0'))
+            if not 0 < length <= 16 * 1024 * 1024:
+                raise ValueError('Invalid image size')
+            if self.headers.get('Content-Type') != 'image/png':
+                raise ValueError('Invalid image type')
+        except ValueError:
+            self.respond_json(400, {'error': '날짜 또는 PNG 이미지 형식이 올바르지 않습니다.'})
+            return
+        self.connection.settimeout(15)
+        image = self.rfile.read(length)
+        if len(image) != length or not image.startswith(b'\x89PNG\r\n\x1a\n'):
+            self.respond_json(400, {'error': 'PNG 이미지를 받지 못했습니다.'})
+            return
+        try:
+            directory = self.server.data_directory
+            directory.mkdir(parents=True, exist_ok=True)
+            pattern = re.compile(re.escape(extraction_date) + r'_(\d+)\.png')
+            numbers = [int(match.group(1)) for path in directory.iterdir()
+                       if (match := pattern.fullmatch(path.name))]
+            number = max(numbers, default=0) + 1
+            while True:
+                filename = '{}_{:03d}.png'.format(extraction_date, number)
+                target = directory / filename
+                try:
+                    output = target.open('xb')
+                    break
+                except FileExistsError:
+                    number += 1
+            try:
+                with output:
+                    output.write(image)
+            except OSError:
+                target.unlink(missing_ok=True)
+                raise
+        except OSError:
+            self.respond_json(500, {'error': 'data 폴더의 쓰기 권한과 디스크 여유 공간을 확인해주세요.'})
+            return
+        self.respond_json(201, {'path': 'data/' + filename, 'number': number})
+
+
+def create_server(data_directory=DATA_DIRECTORY):
+    handler = partial(GraphHandler, directory=str(GRAPH_DIRECTORY))
+    server = ThreadingHTTPServer(('127.0.0.1', 0), handler)
+    server.data_directory = Path(data_directory)
+    return server
 
 
 def open_browser(url):
@@ -49,9 +128,8 @@ def main():
         input('Enter를 누르면 닫힙니다. ')
         return 1
 
-    handler = partial(SimpleHTTPRequestHandler, directory=str(GRAPH_DIRECTORY))
     # An available local port avoids collisions with previously opened servers.
-    with ThreadingHTTPServer(('127.0.0.1', 0), handler) as server:
+    with create_server() as server:
         thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.2}, daemon=True)
         thread.start()
         url = 'http://127.0.0.1:{}/'.format(server.server_port)

@@ -6,12 +6,16 @@ export class ExtractionSession {
     this.startedAt = null;
     this.endedAt = null;
     this.armed = true;
+    this.peakPressure = null;
+    this.startedDate = null;
   }
 
   start(now) {
     if (this.state === 'recording') return;
     this.state = 'recording';
     this.startedAt = now;
+    this.startedDate = new Date();
+    this.peakPressure = this.pressure;
     this.endedAt = null;
     this.points = [];
     this.armed = false;
@@ -37,6 +41,7 @@ export class ExtractionSession {
     }
     if (this.state === 'recording') {
       this.points.push({ time: this.elapsed(now), pressure });
+      this.peakPressure = Math.max(this.peakPressure ?? pressure, pressure);
     }
   }
 

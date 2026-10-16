@@ -10,6 +10,7 @@ let connected = false;
 let closing = false;
 let lastDataAt = null;
 let busy = false;
+let saving = false;
 
 function refresh() {
   $('pressure').textContent = session.pressure === null ? '—' : session.pressure.toFixed(2);
@@ -19,7 +20,7 @@ function refresh() {
   $('toggle').textContent = session.state === 'recording' ? '추출 완료 (Space)' : '추출 시작 (Space)';
   const stale = lastDataAt === null || performance.now() - lastDataAt > 2000;
   $('toggle').disabled = !connected || (stale && session.state !== 'recording');
-  $('download').disabled = session.points.length === 0;
+  $('download').disabled = saving || session.state !== 'completed' || session.points.length === 0;
   if (connected && !closing) {
     $('connection').textContent = stale ? '연결됨 · 압력 데이터 대기 중. 2초 이상 지속되면 스케치와 시리얼 속도(115200)를 확인하세요.' : '연결됨 · 압력 데이터 수신 중 (115200 baud)';
   }
@@ -38,8 +39,12 @@ function draw() {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = '#192331';
   ctx.fillRect(0, 0, width, height);
-  const left = 58, top = 22, right = width - 20, bottom = height - 52;
+  const left = 58, top = 60, right = width - 20, bottom = height - 52;
   const duration = session.elapsed(performance.now());
+  ctx.fillStyle = '#e6edf6'; ctx.textAlign = 'left'; ctx.font = 'bold 14px system-ui';
+  const peak = session.peakPressure === null ? '—' : session.peakPressure.toFixed(2);
+  ctx.fillText(`피크 압력: ${peak} bar`, left, 22);
+  ctx.fillText(`${session.state === 'completed' ? '최종 시간' : '추출 시간'}: ${duration.toFixed(1)}초`, left, 44);
   const maxTime = Math.max(60, Math.ceil(duration / 10) * 10);
   const maxPressure = 20;
   const x = t => left + t / maxTime * (right - left);
@@ -143,17 +148,70 @@ $('connect').addEventListener('click', async () => {
   }
 });
 
-$('download').addEventListener('click', () => {
+function extractionDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function createRecordImage() {
   draw();
-  canvas.toBlob(blob => {
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `extraction-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, 'image/png');
+  const record = document.createElement('canvas');
+  record.width = 1200;
+  const context = record.getContext('2d');
+  context.font = '22px system-ui';
+  const lines = [];
+  const notes = $('notes').value.trim().replace(/\n{3,}/g, '\n\n') || '메모 없음';
+  for (const paragraph of notes.split('\n')) {
+    let line = '';
+    for (const character of paragraph) {
+      if (context.measureText(line + character).width > record.width - 80) {
+        lines.push(line); line = '';
+      }
+      line += character;
+    }
+    lines.push(line);
+  }
+  const graphHeight = Math.round(canvas.height / canvas.width * record.width);
+  record.height = 100 + graphHeight + 80 + lines.length * 32;
+  context.fillStyle = '#192331'; context.fillRect(0, 0, record.width, record.height);
+  context.fillStyle = '#e6edf6'; context.font = 'bold 28px system-ui';
+  context.fillText('추출 기록', 40, 42);
+  context.font = '20px system-ui';
+  context.fillText(`추출 시작: ${session.startedDate.toLocaleString('ko-KR', { hour12: false })}`, 40, 76);
+  context.drawImage(canvas, 0, 100, record.width, graphHeight);
+  context.font = 'bold 22px system-ui';
+  context.fillText('추출 메모', 40, 100 + graphHeight + 38);
+  context.font = '22px system-ui';
+  lines.forEach((line, i) => context.fillText(line, 40, 100 + graphHeight + 76 + i * 32));
+  return record;
+}
+
+$('download').addEventListener('click', async () => {
+  if ($('download').disabled) return;
+  saving = true;
+  const date = extractionDate(session.startedDate);
+  $('save-status').textContent = '그래프와 메모를 저장하고 있습니다…';
+  refresh();
+  try {
+    const record = createRecordImage();
+    const blob = await new Promise(resolve => record.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('이미지를 만들지 못했습니다.');
+    const response = await fetch(`/api/extractions?date=${date}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/png', 'X-Shot-Save': '1' },
+      body: blob,
+    });
+    if (response.status === 404 || response.status === 501) {
+      throw new Error('최신 Open_Graph.bat로 서버를 다시 실행해주세요.');
+    }
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || '파일을 저장하지 못했습니다.');
+    $('save-status').textContent = `저장 완료: ${result.path}`;
+  } catch (error) {
+    $('save-status').textContent = `저장 실패: ${error.message}`;
+  } finally {
+    saving = false;
+    refresh();
+  }
 });
 
 if (!('serial' in navigator) || !window.isSecureContext) {

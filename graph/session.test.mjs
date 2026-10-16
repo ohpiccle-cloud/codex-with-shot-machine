@@ -50,3 +50,19 @@ test('잘못된 측정값은 자동 시작이나 기록을 유발하지 않음',
   assert.equal(s.state, 'waiting');
   assert.equal(s.pressure, null);
 });
+
+test('완료 후 피크와 최종 시간을 유지하고 새 추출에서 초기화', () => {
+  const s = new ExtractionSession();
+  s.ingest(1, 1000);
+  s.ingest(9.45, 2000);
+  s.ingest(6, 3000);
+  s.finish(4000);
+  s.ingest(12, 5000);
+  assert.equal(s.peakPressure, 9.45);
+  assert.equal(s.elapsed(9000), 3);
+  assert.ok(s.startedDate instanceof Date);
+  s.ingest(0, 6000);
+  s.ingest(0.2, 7000);
+  assert.equal(s.peakPressure, 0.2);
+  assert.equal(s.elapsed(7000), 0);
+});
