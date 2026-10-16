@@ -57,7 +57,7 @@ def main():
         url = 'http://127.0.0.1:{}/'.format(server.server_port)
         print('추출 그래프 실행 중: ' + url, flush=True)
         print('Chrome 또는 Edge에서 아두이노 연결을 눌러주세요.', flush=True)
-        print('종료 전 CSV를 저장하세요. 브라우저 탭만 닫으면 서버는 계속 실행됩니다.', flush=True)
+        print('종료 전 그래프 이미지를 저장하세요. 브라우저 탭만 닫으면 서버는 계속 실행됩니다.', flush=True)
         try:
             if not args.no_browser:
                 open_browser(url)

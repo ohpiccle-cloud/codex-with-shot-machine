@@ -10,7 +10,6 @@ let connected = false;
 let closing = false;
 let lastDataAt = null;
 let busy = false;
-let peak = 0;
 
 function refresh() {
   $('pressure').textContent = session.pressure === null ? '—' : session.pressure.toFixed(2);
@@ -37,27 +36,34 @@ function draw() {
   }
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#192331';
+  ctx.fillRect(0, 0, width, height);
   const left = 58, top = 22, right = width - 20, bottom = height - 52;
   const duration = session.elapsed(performance.now());
-  const maxTime = Math.max(30, Math.ceil(duration / 10) * 10);
-  const maxPressure = Math.max(12, Math.ceil(peak / 5) * 5);
+  const maxTime = Math.max(60, Math.ceil(duration / 10) * 10);
+  const maxPressure = 20;
   const x = t => left + t / maxTime * (right - left);
   const y = p => bottom - p / maxPressure * (bottom - top);
   ctx.font = '12px system-ui';
   for (let i = 0; i <= 6; i++) {
     const t = maxTime * i / 6;
-    const p = maxPressure * i / 6;
     ctx.strokeStyle = '#2b394b';
     ctx.beginPath(); ctx.moveTo(x(t), top); ctx.lineTo(x(t), bottom); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(left, y(p)); ctx.lineTo(right, y(p)); ctx.stroke();
     ctx.fillStyle = '#a6b6c9';
     ctx.textAlign = 'center'; ctx.fillText(t.toFixed(0), x(t), bottom + 22);
-    ctx.textAlign = 'right'; ctx.fillText(p.toFixed(0), left - 10, y(p) + 4);
+  }
+  for (let p = 0; p <= maxPressure; p += 5) {
+    ctx.strokeStyle = '#2b394b';
+    ctx.beginPath(); ctx.moveTo(left, y(p)); ctx.lineTo(right, y(p)); ctx.stroke();
+    ctx.fillStyle = '#a6b6c9'; ctx.textAlign = 'right';
+    ctx.fillText(p.toFixed(0), left - 10, y(p) + 4);
   }
   ctx.fillStyle = '#a6b6c9'; ctx.textAlign = 'center';
   ctx.fillText('추출 시간 (초)', (left + right) / 2, height - 6);
   ctx.save(); ctx.translate(14, (top + bottom) / 2); ctx.rotate(-Math.PI / 2);
   ctx.fillText('추출 압력 (bar)', 0, 0); ctx.restore();
+  ctx.save();
+  ctx.beginPath(); ctx.rect(left, top, right - left, bottom - top); ctx.clip();
   ctx.strokeStyle = '#74d6bf'; ctx.lineWidth = 2.5;
   ctx.beginPath();
   session.points.forEach((point, i) => {
@@ -69,12 +75,13 @@ function draw() {
     const p = session.points[0]; ctx.fillStyle = '#74d6bf';
     ctx.beginPath(); ctx.arc(x(p.time), y(p.pressure), 3, 0, Math.PI * 2); ctx.fill();
   }
+  ctx.restore();
 }
 
 function toggleRecording() {
   if ($('toggle').disabled) return;
   if (session.state === 'recording') session.finish(performance.now());
-  else { session.start(performance.now()); peak = session.pressure ?? 0; }
+  else session.start(performance.now());
   refresh();
 }
 
@@ -107,10 +114,7 @@ $('connect').addEventListener('click', async () => {
     $('connect').disabled = false;
     const decoder = new TextDecoder();
     const lines = new PressureLines(pressure => {
-      const previousStart = session.startedAt;
       session.ingest(pressure, performance.now());
-      if (previousStart !== session.startedAt) peak = 0;
-      if (session.state === 'recording') peak = Math.max(peak, pressure);
       lastDataAt = performance.now();
     });
     reader = port.readable.getReader();
@@ -140,13 +144,16 @@ $('connect').addEventListener('click', async () => {
 });
 
 $('download').addEventListener('click', () => {
-  const csv = 'time_s,pressure_bar\r\n' + session.points.map(p => `${p.time.toFixed(3)},${p.pressure.toFixed(2)}`).join('\r\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `extraction-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  draw();
+  canvas.toBlob(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `extraction-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
 });
 
 if (!('serial' in navigator) || !window.isSecureContext) {
