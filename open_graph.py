@@ -18,13 +18,13 @@ def open_browser(url):
     # Web Serial requires desktop Chrome or Edge. Prefer one over the default browser.
     candidates = []
     if os.name == 'nt':
+        roots = []
         for variable in ('PROGRAMFILES', 'PROGRAMFILES(X86)', 'LOCALAPPDATA'):
             base = os.environ.get(variable)
             if base:
-                candidates.extend([
-                    str(Path(base) / 'Microsoft/Edge/Application/msedge.exe'),
-                    str(Path(base) / 'Google/Chrome/Application/chrome.exe'),
-                ])
+                roots.append(Path(base))
+        candidates.extend(str(base / 'Google/Chrome/Application/chrome.exe') for base in roots)
+        candidates.extend(str(base / 'Microsoft/Edge/Application/msedge.exe') for base in roots)
     candidates.extend(['google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge'])
     for candidate in candidates:
         executable = shutil.which(candidate)
