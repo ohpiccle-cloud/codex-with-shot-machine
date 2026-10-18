@@ -57,7 +57,7 @@ test('완료 후 피크와 최종 시간을 유지하고 새 추출에서 초기
   const s = new ExtractionSession();
   s.ingest(1.01, 1000);
   s.ingest(9.45, 2000);
-  s.ingest(6, 3000);
+  s.ingest(8, 3000);
   s.finish(4000);
   s.ingest(12, 5000);
   assert.equal(s.peakPressure, 9.45);
@@ -69,15 +69,15 @@ test('완료 후 피크와 최종 시간을 유지하고 새 추출에서 초기
   assert.equal(s.elapsed(7000), 0);
 });
 
-test('200ms에 1bar 하강 시 자동 완료, 마지막 점과 피크 및 최종 시간 유지', () => {
+test('200ms에 0.4bar 하강 시 자동 완료, 마지막 점과 피크 및 최종 시간 유지', () => {
   const s = new ExtractionSession();
   s.ingest(9, 1000);
-  s.ingest(8, 1200);
+  s.ingest(8.6, 1200);
   assert.equal(s.state, 'completed');
   assert.equal(s.completionReason, 'pressure-drop');
   assert.equal(s.peakPressure, 9);
   assert.equal(s.elapsed(9000), 0.2);
-  assert.deepEqual(s.points.at(-1), { time: 0.2, pressure: 8 });
+  assert.deepEqual(s.points.at(-1), { time: 0.2, pressure: 8.6 });
   s.ingest(7, 1400);
   assert.equal(s.points.length, 2);
   s.ingest(1, 1600);
@@ -89,11 +89,11 @@ test('200ms에 1bar 하강 시 자동 완료, 마지막 점과 피크 및 최종
 test('완만한 하강과 상승은 추출을 종료하지 않음', () => {
   const s = new ExtractionSession();
   s.ingest(9, 0);
-  s.ingest(8.01, 200);
+  s.ingest(8.61, 200);
   assert.equal(s.state, 'recording');
   s.ingest(10, 400);
   assert.equal(s.state, 'recording');
-  s.ingest(8.5, 700); // 1.5 bar / 0.3 s = 5 bar/s
+  s.ingest(9, 900); // 1 bar / 0.5 s = 2 bar/s
   assert.equal(s.state, 'completed');
 });
 

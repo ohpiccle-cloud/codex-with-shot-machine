@@ -1,5 +1,5 @@
 export const AUTO_START_BAR = 1.0;
-export const AUTO_FINISH_DROP_BAR_PER_SECOND = 5.0;
+export const AUTO_FINISH_DROP_BAR_PER_SECOND = 2.0;
 
 export class ExtractionSession {
   constructor() {
@@ -53,7 +53,7 @@ export class ExtractionSession {
       const previous = this.slopeSample;
       const interval = previous === null ? null : now - previous.at;
       // Ignore near-simultaneous buffered lines and gaps in reception.
-      // At the normal 5 Hz rate, a 1 bar drop over 200 ms completes a shot.
+      // At the normal 5 Hz rate, a 0.4 bar drop over 200 ms completes a shot.
       if (previous && interval >= 100 && interval <= 1000
           && (previous.pressure - pressure) * 1000 >= AUTO_FINISH_DROP_BAR_PER_SECOND * interval) {
         this.finish(now, 'pressure-drop');
