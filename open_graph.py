@@ -11,6 +11,8 @@ import re
 import shutil
 import subprocess
 import threading
+import time
+import sys
 import webbrowser
 from urllib.parse import parse_qs, urlsplit
 
@@ -18,6 +20,39 @@ from urllib.parse import parse_qs, urlsplit
 GRAPH_DIRECTORY = Path(__file__).resolve().parent / 'graph'
 DATA_DIRECTORY = Path(__file__).resolve().parent / 'data'
 RECORD_NAME = re.compile(r'(\d{4}-\d{2}-\d{2})_(\d+)\.png')
+
+
+class BrowserWindows:
+    def __init__(self, grace=3, clock=time.monotonic):
+        self.grace = grace
+        self.clock = clock
+        self.active = set()
+        self.closed = {}
+        self.deadline = None
+        self.lock = threading.Lock()
+
+    def update(self, token, opened):
+        with self.lock:
+            now = self.clock()
+            self.closed = {key: stamp for key, stamp in self.closed.items() if now - stamp < 60}
+            if opened:
+                # A fast tab close can arrive before its initial registration.
+                if token not in self.closed:
+                    self.active.add(token)
+                if self.active:
+                    self.deadline = None
+                elif self.deadline is None:
+                    self.deadline = now + self.grace
+            else:
+                known = token in self.active
+                self.active.discard(token)
+                self.closed[token] = now
+                if known and not self.active:
+                    self.deadline = now + self.grace
+
+    def expired(self):
+        with self.lock:
+            return self.deadline is not None and self.clock() >= self.deadline
 
 
 class GraphHandler(SimpleHTTPRequestHandler):
@@ -73,16 +108,31 @@ class GraphHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         address = urlsplit(self.path)
-        if address.path != '/api/extractions':
+        if address.path not in ('/api/extractions', '/api/window/open', '/api/window/close'):
             self.respond_json(404, {'error': '저장 경로를 찾을 수 없습니다.'})
             return
         hosts = {'127.0.0.1:{}'.format(self.server.server_port),
                  'localhost:{}'.format(self.server.server_port)}
         origin = self.headers.get('Origin')
         if (self.headers.get('Host') not in hosts
-                or self.headers.get('X-Shot-Save') != '1'
+                or (address.path != '/api/window/close' and self.headers.get('X-Shot-Save') != '1')
                 or (origin is not None and origin not in {'http://' + host for host in hosts})):
             self.respond_json(403, {'error': '이 프로그램 화면에서만 저장할 수 있습니다.'})
+            return
+        if address.path.startswith('/api/window/'):
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if length != 32:
+                    raise ValueError('Invalid token length')
+                self.connection.settimeout(5)
+                token = self.rfile.read(length).decode('ascii')
+                if not re.fullmatch(r'[a-f0-9]{32}', token):
+                    raise ValueError('Invalid token')
+            except (ValueError, UnicodeError):
+                self.respond_json(400, {'error': '잘못된 창 식별자입니다.'})
+                return
+            self.server.windows.update(token, address.path.endswith('/open'))
+            self.respond_json(200, {'ok': True})
             return
         try:
             extraction_date = parse_qs(address.query).get('date', [''])[0]
@@ -133,6 +183,7 @@ def create_server(data_directory=DATA_DIRECTORY, port=0):
     handler = partial(GraphHandler, directory=str(GRAPH_DIRECTORY))
     server = ThreadingHTTPServer(('127.0.0.1', port), handler)
     server.data_directory = Path(data_directory)
+    server.windows = BrowserWindows()
     return server
 
 
@@ -185,12 +236,23 @@ def main():
         url = 'http://127.0.0.1:{}/'.format(server.server_port)
         print('추출 그래프 실행 중: ' + url, flush=True)
         print('Chrome 또는 Edge에서 아두이노 연결을 눌러주세요.', flush=True)
-        print('종료 전 그래프 이미지를 저장하세요. 브라우저 탭만 닫으면 서버는 계속 실행됩니다.', flush=True)
+        print('종료 전 그래프 이미지를 저장하세요. 마지막 그래프 탭을 닫으면 약 3초 후 프로그램도 종료됩니다.', flush=True)
+        print('이 창에서 Enter 또는 Ctrl+C로도 종료할 수 있습니다.', flush=True)
         try:
             if not args.no_browser:
                 open_browser(url)
-            input('이 창에서 Enter를 누르면 서버가 종료됩니다. ')
-        except (KeyboardInterrupt, EOFError):
+            while not server.windows.expired():
+                if os.name == 'nt':
+                    import msvcrt
+                    if msvcrt.kbhit() and msvcrt.getwch() in ('\r', '\n'):
+                        break
+                elif sys.stdin.isatty():
+                    import select
+                    if select.select([sys.stdin], [], [], 0)[0]:
+                        sys.stdin.readline()
+                        break
+                time.sleep(0.2)
+        except KeyboardInterrupt:
             pass
         finally:
             server.shutdown()

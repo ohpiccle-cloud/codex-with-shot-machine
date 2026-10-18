@@ -1,6 +1,7 @@
 import { ExtractionSession } from './session.mjs';
 import { receivePressure } from './serial.mjs';
 import { chooseAutomaticPort, portIdentity } from './autoconnect.mjs';
+import './window.mjs';
 
 const session = new ExtractionSession();
 const $ = id => document.getElementById(id);
