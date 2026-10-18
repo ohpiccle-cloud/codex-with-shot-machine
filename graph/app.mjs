@@ -1,4 +1,5 @@
-import { ExtractionSession, PressureLines } from './session.mjs';
+import { ExtractionSession } from './session.mjs';
+import { receivePressure } from './serial.mjs';
 
 const session = new ExtractionSession();
 const $ = id => document.getElementById(id);
@@ -11,20 +12,24 @@ let closing = false;
 let lastDataAt = null;
 let busy = false;
 let saving = false;
+let readWarning = '';
 const stateColors = { waiting: '#94a3b8', recording: '#fbbf24', completed: '#74d6bf' };
 
 function refresh() {
-  $('pressure').textContent = session.pressure === null ? '—' : session.pressure.toFixed(2);
+  const stale = lastDataAt === null || performance.now() - lastDataAt > 2000;
+  $('pressure').textContent = !connected || stale || session.pressure === null ? '—' : session.pressure.toFixed(2);
   $('elapsed').textContent = session.elapsed(performance.now()).toFixed(1);
   $('state').textContent = { waiting: '추출 전', recording: '추출 중', completed: '추출 완료' }[session.state];
   $('state').style.color = stateColors[session.state];
   $('chart-panel').dataset.state = session.state;
   $('toggle').textContent = session.state === 'recording' ? '추출 완료 (Space)' : '추출 시작 (Space)';
-  const stale = lastDataAt === null || performance.now() - lastDataAt > 2000;
   $('toggle').disabled = !connected || (stale && session.state !== 'recording');
   $('download').disabled = saving || session.state !== 'completed' || session.points.length === 0;
   if (connected && !closing) {
-    $('connection').textContent = stale ? '연결됨 · 압력 데이터 대기 중. 2초 이상 지속되면 스케치와 시리얼 속도(115200)를 확인하세요.' : '연결됨 · 압력 데이터 수신 중 (115200 baud)';
+    const delay = lastDataAt === null ? '압력 데이터 대기 중' : `압력 수신 중단 · 마지막 수신 ${Math.floor((performance.now() - lastDataAt) / 1000)}초 전`;
+    $('connection').textContent = readWarning || (stale
+      ? `연결됨 · ${delay}. 계속되면 기록을 저장하고 연결 해제 후 다시 연결하세요.`
+      : '연결됨 · 압력 데이터 수신 중 (115200 baud)');
   }
   draw();
 }
@@ -128,24 +133,26 @@ $('connect').addEventListener('click', async () => {
     closing = false;
     session.pressure = null;
     lastDataAt = null;
+    readWarning = '';
     $('connect').textContent = '연결 해제';
     $('connect').disabled = false;
-    const decoder = new TextDecoder();
-    const lines = new PressureLines(pressure => {
-      session.ingest(pressure, performance.now());
-      lastDataAt = performance.now();
+    await receivePressure(port, {
+      onPressure: pressure => {
+        session.ingest(pressure, performance.now());
+        lastDataAt = performance.now();
+        readWarning = '';
+      },
+      onReader: value => { reader = value; },
+      onReadError: (error, attempt) => {
+        readWarning = `시리얼 수신 오류 (${error.name}) · 수신 복구 시도 ${attempt}/3. 계속되면 기록을 저장하고 다시 연결하세요.`;
+      },
+      shouldStop: () => closing,
     });
-    reader = port.readable.getReader();
-    while (!closing) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      lines.push(decoder.decode(value, { stream: true }));
-    }
     $('connection').textContent = '연결이 해제되었습니다. 다시 연결할 수 있습니다.';
   } catch (error) {
     $('connection').textContent = error.name === 'NotFoundError'
       ? '보드 선택이 취소되었습니다.'
-      : `연결 실패: ${error.message}. Arduino IDE의 시리얼 모니터를 닫고 다시 연결하세요.`;
+      : `연결/수신 오류 (${error.name}): ${error.message}. USB 연결과 PC 절전 상태를 확인하고, 시리얼 모니터를 닫은 뒤 다시 연결하세요.`;
   } finally {
     connected = false;
     session.finish(performance.now());
