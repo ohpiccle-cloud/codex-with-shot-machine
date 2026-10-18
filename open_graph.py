@@ -129,9 +129,9 @@ class GraphHandler(SimpleHTTPRequestHandler):
         self.respond_json(201, {'path': 'data/' + filename, 'number': number})
 
 
-def create_server(data_directory=DATA_DIRECTORY):
+def create_server(data_directory=DATA_DIRECTORY, port=0):
     handler = partial(GraphHandler, directory=str(GRAPH_DIRECTORY))
-    server = ThreadingHTTPServer(('127.0.0.1', 0), handler)
+    server = ThreadingHTTPServer(('127.0.0.1', port), handler)
     server.data_directory = Path(data_directory)
     return server
 
@@ -171,8 +171,15 @@ def main():
         input('Enter를 누르면 닫힙니다. ')
         return 1
 
-    # An available local port avoids collisions with previously opened servers.
-    with create_server() as server:
+    # Web Serial grants belong to an origin, including its port number.
+    try:
+        server = create_server(port=10001)
+    except OSError as error:
+        print('서버를 실행하지 못했습니다: {}'.format(error))
+        print('기존 실행창을 종료하고 다시 실행하세요. 고정 포트 10001이 필요합니다.')
+        input('Enter를 누르면 닫힙니다. ')
+        return 1
+    with server:
         thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.2}, daemon=True)
         thread.start()
         url = 'http://127.0.0.1:{}/'.format(server.server_port)

@@ -1,5 +1,6 @@
 import { ExtractionSession } from './session.mjs';
 import { receivePressure } from './serial.mjs';
+import { chooseAutomaticPort, portIdentity } from './autoconnect.mjs';
 
 const session = new ExtractionSession();
 const $ = id => document.getElementById(id);
@@ -124,11 +125,18 @@ $('connect').addEventListener('click', async () => {
     catch { /* 읽기 루프의 finally에서 연결 정리 */ }
     return;
   }
+  await connectPort();
+});
+
+async function connectPort(knownPort = null) {
+  if (busy || connected || closing) return;
   busy = true;
   $('connect').disabled = true;
+  $('connection').textContent = knownPort ? '이전에 허용한 아두이노에 자동 연결 중…' : '아두이노 포트를 선택해주세요.';
   try {
-    port = await navigator.serial.requestPort();
+    port = knownPort ?? await navigator.serial.requestPort();
     await port.open({ baudRate: 115200 });
+    try { localStorage.setItem('shot-port-identity', portIdentity(port)); } catch { /* 저장소 사용 불가 */ }
     connected = true;
     closing = false;
     session.pressure = null;
@@ -166,7 +174,27 @@ $('connect').addEventListener('click', async () => {
     $('connect').textContent = '아두이노 연결';
     refresh();
   }
-});
+}
+
+async function autoConnect() {
+  if (busy || connected || closing) return;
+  try {
+    const ports = await navigator.serial.getPorts();
+    if (busy || connected || closing) return;
+    let preferred = null;
+    try { preferred = localStorage.getItem('shot-port-identity'); } catch { /* 저장소 사용 불가 */ }
+    const candidate = chooseAutomaticPort(ports, preferred);
+    if (candidate) {
+      void connectPort(candidate);
+    } else {
+      $('connection').textContent = ports.length > 1
+        ? '허용된 장치가 여러 개입니다. 아두이노 연결을 눌러 사용할 포트를 선택하세요.'
+        : '자동 연결할 아두이노가 없습니다. USB 연결을 확인하고 처음 한 번 아두이노 연결을 눌러 허용해주세요.';
+    }
+  } catch (error) {
+    if (!busy && !connected) $('connection').textContent = `자동 연결 확인 실패: ${error.message}. 아두이노 연결 버튼으로 연결하세요.`;
+  }
+}
 
 function extractionDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -290,6 +318,9 @@ $('preview-image').addEventListener('error', () => {
 if (!('serial' in navigator) || !window.isSecureContext) {
   $('connect').disabled = true;
   $('connection').textContent = 'PC용 Chrome 또는 Edge에서 localhost로 열어주세요. 이 브라우저에서는 USB 시리얼 연결을 지원하지 않습니다.';
+} else {
+  navigator.serial.addEventListener('connect', autoConnect);
+  void autoConnect();
 }
 setInterval(refresh, 100);
 refresh();
