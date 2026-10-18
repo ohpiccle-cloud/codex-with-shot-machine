@@ -68,3 +68,51 @@ test('완료 후 피크와 최종 시간을 유지하고 새 추출에서 초기
   assert.equal(s.peakPressure, 1.2);
   assert.equal(s.elapsed(7000), 0);
 });
+
+test('200ms에 1bar 하강 시 자동 완료, 마지막 점과 피크 및 최종 시간 유지', () => {
+  const s = new ExtractionSession();
+  s.ingest(9, 1000);
+  s.ingest(8, 1200);
+  assert.equal(s.state, 'completed');
+  assert.equal(s.completionReason, 'pressure-drop');
+  assert.equal(s.peakPressure, 9);
+  assert.equal(s.elapsed(9000), 0.2);
+  assert.deepEqual(s.points.at(-1), { time: 0.2, pressure: 8 });
+  s.ingest(7, 1400);
+  assert.equal(s.points.length, 2);
+  s.ingest(1, 1600);
+  s.ingest(2, 1800);
+  assert.equal(s.state, 'recording');
+  assert.equal(s.completionReason, null);
+});
+
+test('완만한 하강과 상승은 추출을 종료하지 않음', () => {
+  const s = new ExtractionSession();
+  s.ingest(9, 0);
+  s.ingest(8.01, 200);
+  assert.equal(s.state, 'recording');
+  s.ingest(10, 400);
+  assert.equal(s.state, 'recording');
+  s.ingest(8.5, 700); // 1.5 bar / 0.3 s = 5 bar/s
+  assert.equal(s.state, 'completed');
+});
+
+test('수신 공백과 동일 시각에 몰린 데이터는 즉시 급락으로 판정하지 않음', () => {
+  const s = new ExtractionSession();
+  s.ingest(12, 0);
+  s.ingest(1, 1500);
+  assert.equal(s.state, 'recording');
+  s.ingest(9, 1700);
+  s.ingest(8, 1700);
+  assert.equal(s.state, 'recording');
+});
+
+test('무압 수동 시작 후 압력이 내려가면 자동 완료 가능', () => {
+  const s = new ExtractionSession();
+  s.ingest(0, 0);
+  s.start(100);
+  s.ingest(9, 300);
+  s.ingest(7.9, 500);
+  assert.equal(s.completionReason, 'pressure-drop');
+  assert.equal(s.elapsed(2000), 0.4);
+});

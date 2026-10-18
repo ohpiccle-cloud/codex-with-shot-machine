@@ -1,4 +1,5 @@
 export const AUTO_START_BAR = 1.0;
+export const AUTO_FINISH_DROP_BAR_PER_SECOND = 5.0;
 
 export class ExtractionSession {
   constructor() {
@@ -10,6 +11,8 @@ export class ExtractionSession {
     this.armed = true;
     this.peakPressure = null;
     this.startedDate = null;
+    this.completionReason = null;
+    this.slopeSample = null;
   }
 
   start(now) {
@@ -21,13 +24,16 @@ export class ExtractionSession {
     this.endedAt = null;
     this.points = [];
     this.armed = false;
+    this.completionReason = null;
+    this.slopeSample = this.pressure === null ? null : { pressure: this.pressure, at: now };
     if (this.pressure !== null) this.points.push({ time: 0, pressure: this.pressure });
   }
 
-  finish(now) {
+  finish(now, reason = 'manual') {
     if (this.state !== 'recording') return;
     this.endedAt = now;
     this.state = 'completed';
+    this.completionReason = reason;
     this.armed = this.pressure !== null && this.pressure <= AUTO_START_BAR;
   }
 
@@ -44,6 +50,17 @@ export class ExtractionSession {
     if (this.state === 'recording') {
       this.points.push({ time: this.elapsed(now), pressure });
       this.peakPressure = Math.max(this.peakPressure ?? pressure, pressure);
+      const previous = this.slopeSample;
+      const interval = previous === null ? null : now - previous.at;
+      // Ignore near-simultaneous buffered lines and gaps in reception.
+      // At the normal 5 Hz rate, a 1 bar drop over 200 ms completes a shot.
+      if (previous && interval >= 100 && interval <= 1000
+          && (previous.pressure - pressure) * 1000 >= AUTO_FINISH_DROP_BAR_PER_SECOND * interval) {
+        this.finish(now, 'pressure-drop');
+      }
+      if (previous === null || interval >= 100 || interval < 0) {
+        this.slopeSample = { pressure, at: now };
+      }
     }
   }
 

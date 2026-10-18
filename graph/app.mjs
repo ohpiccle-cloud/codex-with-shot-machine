@@ -22,6 +22,7 @@ function refresh() {
   $('pressure').textContent = !connected || stale || session.pressure === null ? '—' : session.pressure.toFixed(2);
   $('elapsed').textContent = session.elapsed(performance.now()).toFixed(1);
   $('state').textContent = { waiting: '추출 전', recording: '추출 중', completed: '추출 완료' }[session.state];
+  if (session.completionReason === 'pressure-drop') $('state').textContent += ' (자동)';
   $('state').style.color = stateColors[session.state];
   $('chart-panel').dataset.state = session.state;
   $('toggle').textContent = session.state === 'recording' ? '추출 완료 (Space)' : '추출 시작 (Space)';
