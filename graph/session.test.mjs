@@ -2,23 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ExtractionSession, PressureLines } from './session.mjs';
 
-test('0.1 초과 자동 시작, 상대 시간 기록, 수동 완료 후 고압 재시작 방지', () => {
+test('1bar 초과 자동 시작, 상대 시간 기록, 수동 완료 후 고압 재시작 방지', () => {
   const s = new ExtractionSession();
-  s.ingest(0.1, 100);
+  s.ingest(0.5, 50);
   assert.equal(s.state, 'waiting');
-  s.ingest(0.11, 200);
+  s.ingest(1.0, 100);
+  assert.equal(s.state, 'waiting');
+  s.ingest(1.01, 200);
   assert.equal(s.state, 'recording');
   s.ingest(9, 1200);
-  assert.deepEqual(s.points, [{ time: 0, pressure: 0.11 }, { time: 1, pressure: 9 }]);
+  assert.deepEqual(s.points, [{ time: 0, pressure: 1.01 }, { time: 1, pressure: 9 }]);
   s.finish(2200);
   s.ingest(8, 3000);
   assert.equal(s.state, 'completed');
   assert.equal(s.elapsed(9000), 2);
   assert.equal(s.points.length, 2);
-  s.ingest(0.1, 4000);
-  s.ingest(0.2, 5000);
+  s.ingest(1.0, 4000);
+  s.ingest(1.2, 5000);
   assert.equal(s.state, 'recording');
-  assert.deepEqual(s.points, [{ time: 0, pressure: 0.2 }]);
+  assert.deepEqual(s.points, [{ time: 0, pressure: 1.2 }]);
 });
 
 test('무압 수동 시작, 완료 및 다음 수동 시작', () => {
@@ -53,7 +55,7 @@ test('잘못된 측정값은 자동 시작이나 기록을 유발하지 않음',
 
 test('완료 후 피크와 최종 시간을 유지하고 새 추출에서 초기화', () => {
   const s = new ExtractionSession();
-  s.ingest(1, 1000);
+  s.ingest(1.01, 1000);
   s.ingest(9.45, 2000);
   s.ingest(6, 3000);
   s.finish(4000);
@@ -62,7 +64,7 @@ test('완료 후 피크와 최종 시간을 유지하고 새 추출에서 초기
   assert.equal(s.elapsed(9000), 3);
   assert.ok(s.startedDate instanceof Date);
   s.ingest(0, 6000);
-  s.ingest(0.2, 7000);
-  assert.equal(s.peakPressure, 0.2);
+  s.ingest(1.2, 7000);
+  assert.equal(s.peakPressure, 1.2);
   assert.equal(s.elapsed(7000), 0);
 });

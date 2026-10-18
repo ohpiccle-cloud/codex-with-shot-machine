@@ -35,6 +35,9 @@ button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .metrics small { font-size: 16px; font-weight: 400; color: #a6b6c9; }
 #state { font-size: 25px; }
 .chart { background: #192331; padding: 16px; border-radius: 12px; }
+.chart[data-state="waiting"] { box-shadow: 0 0 0 2px #94a3b8; }
+.chart[data-state="recording"] { box-shadow: 0 0 0 3px #fbbf24; }
+.chart[data-state="completed"] { box-shadow: 0 0 0 2px #74d6bf; }
 .memo { margin-top: 20px; }
 .memo label { display: block; margin-bottom: 10px; font-weight: 600; }
 textarea { width: 100%; resize: vertical; padding: 14px; border: 1px solid #42526a; border-radius: 9px; background: #192331; color: #e6edf6; font: 16px/1.6 system-ui, sans-serif; }

@@ -11,12 +11,14 @@ let closing = false;
 let lastDataAt = null;
 let busy = false;
 let saving = false;
+const stateColors = { waiting: '#94a3b8', recording: '#fbbf24', completed: '#74d6bf' };
 
 function refresh() {
   $('pressure').textContent = session.pressure === null ? '—' : session.pressure.toFixed(2);
   $('elapsed').textContent = session.elapsed(performance.now()).toFixed(1);
-  $('state').textContent = { waiting: '대기 중', recording: '추출 중', completed: '추출 완료' }[session.state];
-  $('state').style.color = session.state === 'recording' ? '#74d6bf' : '';
+  $('state').textContent = { waiting: '추출 전', recording: '추출 중', completed: '추출 완료' }[session.state];
+  $('state').style.color = stateColors[session.state];
+  $('chart-panel').dataset.state = session.state;
   $('toggle').textContent = session.state === 'recording' ? '추출 완료 (Space)' : '추출 시작 (Space)';
   const stale = lastDataAt === null || performance.now() - lastDataAt > 2000;
   $('toggle').disabled = !connected || (stale && session.state !== 'recording');
@@ -39,6 +41,9 @@ function draw() {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = '#192331';
   ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = stateColors[session.state]; ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, width - 2, height - 2);
+  ctx.lineWidth = 1;
   const left = 58, top = 60, right = width - 20, bottom = height - 52;
   const duration = session.elapsed(performance.now());
   ctx.fillStyle = '#e6edf6'; ctx.textAlign = 'left'; ctx.font = 'bold 14px system-ui';
@@ -69,6 +74,13 @@ function draw() {
   ctx.fillText('추출 압력 (bar)', 0, 0); ctx.restore();
   ctx.save();
   ctx.beginPath(); ctx.rect(left, top, right - left, bottom - top); ctx.clip();
+  if (session.peakPressure !== null && session.peakPressure <= maxPressure) {
+    ctx.save();
+    ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.5; ctx.setLineDash([7, 5]);
+    ctx.beginPath(); ctx.moveTo(left, y(session.peakPressure));
+    ctx.lineTo(right, y(session.peakPressure)); ctx.stroke();
+    ctx.restore();
+  }
   ctx.strokeStyle = '#74d6bf'; ctx.lineWidth = 2.5;
   ctx.beginPath();
   session.points.forEach((point, i) => {
