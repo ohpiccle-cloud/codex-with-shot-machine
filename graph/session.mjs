@@ -1,3 +1,5 @@
+export const AUTO_START_BAR = 1.0;
+
 export class ExtractionSession {
   constructor() {
     this.state = 'waiting';
@@ -26,15 +28,15 @@ export class ExtractionSession {
     if (this.state !== 'recording') return;
     this.endedAt = now;
     this.state = 'completed';
-    this.armed = this.pressure !== null && this.pressure <= 0.1;
+    this.armed = this.pressure !== null && this.pressure <= AUTO_START_BAR;
   }
 
   ingest(pressure, now) {
     if (!Number.isFinite(pressure) || pressure < 0) return;
     this.pressure = pressure;
     if (this.state !== 'recording') {
-      if (pressure <= 0.1) this.armed = true;
-      if (pressure > 0.1 && this.armed) {
+      if (pressure <= AUTO_START_BAR) this.armed = true;
+      if (pressure > AUTO_START_BAR && this.armed) {
         this.start(now);
         return;
       }
