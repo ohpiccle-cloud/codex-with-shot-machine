@@ -1,5 +1,7 @@
 export const AUTO_START_BAR = 1.0;
 export const AUTO_FINISH_DROP_BAR_PER_SECOND = 2.0;
+export const REARM_PRESSURE_BAR = 0.1;
+export const REARM_STABLE_MS = 1000;
 
 export class ExtractionSession {
   constructor() {
@@ -13,6 +15,8 @@ export class ExtractionSession {
     this.startedDate = null;
     this.completionReason = null;
     this.slopeSample = null;
+    this.rearmLowSince = null;
+    this.lastRearmSampleAt = null;
   }
 
   start(now) {
@@ -24,6 +28,8 @@ export class ExtractionSession {
     this.endedAt = null;
     this.points = [];
     this.armed = false;
+    this.rearmLowSince = null;
+    this.lastRearmSampleAt = null;
     this.completionReason = null;
     this.slopeSample = this.pressure === null ? null : { pressure: this.pressure, at: now };
     if (this.pressure !== null) this.points.push({ time: 0, pressure: this.pressure });
@@ -34,14 +40,28 @@ export class ExtractionSession {
     this.endedAt = now;
     this.state = 'completed';
     this.completionReason = reason;
-    this.armed = this.pressure !== null && this.pressure <= AUTO_START_BAR;
+    // A completed shot remains locked until pressure has settled near zero.
+    this.armed = false;
+    this.rearmLowSince = null;
+    this.lastRearmSampleAt = null;
   }
 
   ingest(pressure, now) {
     if (!Number.isFinite(pressure) || pressure < 0) return;
     this.pressure = pressure;
     if (this.state !== 'recording') {
-      if (pressure <= AUTO_START_BAR) this.armed = true;
+      if (this.state === 'completed' && !this.armed) {
+        if (pressure <= REARM_PRESSURE_BAR) {
+          const gap = this.lastRearmSampleAt === null ? null : now - this.lastRearmSampleAt;
+          if (this.rearmLowSince === null || gap === null || gap > 1000 || gap < 0) {
+            this.rearmLowSince = now;
+          }
+          if (now - this.rearmLowSince >= REARM_STABLE_MS) this.armed = true;
+        } else {
+          this.rearmLowSince = null;
+        }
+        this.lastRearmSampleAt = now;
+      }
       if (pressure > AUTO_START_BAR && this.armed) {
         this.start(now);
         return;
