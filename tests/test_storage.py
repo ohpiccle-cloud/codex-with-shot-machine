@@ -65,6 +65,16 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(response.headers['Cache-Control'], 'no-store')
             return json.load(response)['records']
 
+    def test_app_files_always_refresh_even_with_future_cached_timestamp(self):
+        for path in ['/', '/app.mjs?v=2026-11-04-r2', '/session.mjs?v=2026-11-04-r2']:
+            request = urllib.request.Request(self.url + path, headers={
+                'If-Modified-Since': 'Wed, 01 Jan 2031 00:00:00 GMT',
+            })
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers['Cache-Control'], 'no-store')
+                self.assertTrue(response.read())
+
     def test_history_empty_and_existing_files_sorted_by_date_and_number(self):
         self.assertEqual(self.history(), [])
         self.directory.mkdir()

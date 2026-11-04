@@ -1,10 +1,28 @@
-import { ExtractionSession } from './session.mjs';
-import { receivePressure } from './serial.mjs';
-import { chooseAutomaticPort, portIdentity } from './autoconnect.mjs';
-import './window.mjs';
+import { ExtractionSession } from './session.mjs?v=2026-11-04-r2';
+import { receivePressure } from './serial.mjs?v=2026-11-04-r2';
+import { chooseAutomaticPort, portIdentity } from './autoconnect.mjs?v=2026-11-04-r2';
+import './window.mjs?v=2026-11-04-r2';
+import { restoreCompleted, persistCompleted } from './persistence.mjs?v=2026-11-04-r2';
 
-const session = new ExtractionSession();
+let restored;
+try { restored = restoreCompleted(localStorage, performance.now(), Date.now()); } catch { /* 브라우저 저장소 사용 불가 */ }
+const session = restored?.session ?? new ExtractionSession();
 const $ = id => document.getElementById(id);
+if (restored?.notes) $('notes').value = restored.notes;
+let persistedState = session.state;
+let persistedEnd = session.endedAt;
+
+function rememberCompleted(force = false) {
+  if (!force && persistedState === session.state && persistedEnd === session.endedAt) return;
+  persistedState = session.state;
+  persistedEnd = session.endedAt;
+  try { persistCompleted(localStorage, session, performance.now(), Date.now(), $('notes').value); }
+  catch (error) { console.warn('완료 기록 복원용 저장 실패:', error); }
+}
+
+$('notes').addEventListener('input', () => {
+  if (session.state === 'completed') rememberCompleted(true);
+});
 const canvas = $('graph');
 const ctx = canvas.getContext('2d');
 let port = null;
@@ -18,6 +36,7 @@ let readWarning = '';
 const stateColors = { waiting: '#94a3b8', recording: '#fbbf24', completed: '#74d6bf' };
 
 function refresh() {
+  rememberCompleted();
   const stale = lastDataAt === null || performance.now() - lastDataAt > 2000;
   $('pressure').textContent = !connected || stale || session.pressure === null ? '—' : session.pressure.toFixed(2);
   $('elapsed').textContent = session.elapsed(performance.now()).toFixed(1);
@@ -151,6 +170,7 @@ async function connectPort(knownPort = null) {
     await receivePressure(port, {
       onPressure: pressure => {
         session.ingest(pressure, performance.now());
+        rememberCompleted();
         lastDataAt = performance.now();
         readWarning = '';
       },

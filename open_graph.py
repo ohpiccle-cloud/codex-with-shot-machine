@@ -56,12 +56,15 @@ class BrowserWindows:
 
 
 class GraphHandler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-store')
+        super().end_headers()
+
     def respond_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(body)
 
@@ -100,10 +103,12 @@ class GraphHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'image/png')
             self.send_header('Content-Length', str(len(image)))
-            self.send_header('Cache-Control', 'no-store')
             self.end_headers()
             self.wfile.write(image)
             return
+        # ZIP downloads can preserve older mtimes; never answer 304 for changed app files.
+        if 'If-Modified-Since' in self.headers:
+            del self.headers['If-Modified-Since']
         super().do_GET()
 
     def do_POST(self):

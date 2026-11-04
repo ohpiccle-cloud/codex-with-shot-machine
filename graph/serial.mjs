@@ -1,4 +1,4 @@
-import { PressureLines } from './session.mjs';
+import { PressureLines } from './session.mjs?v=2026-11-04-r2';
 
 // Web Serial recreates readable after recoverable framing/overrun errors.
 // Reacquire the reader without reopening the port (which may reset the board).
