@@ -2,6 +2,7 @@ export const AUTO_START_BAR = 1.0;
 export const AUTO_FINISH_DROP_BAR_PER_SECOND = 2.0;
 export const REARM_PRESSURE_BAR = 1.0;
 export const REARM_STABLE_MS = 1000;
+export const RESTART_COOLDOWN_MS = 30000;
 
 export class ExtractionSession {
   constructor() {
@@ -20,7 +21,7 @@ export class ExtractionSession {
   }
 
   start(now) {
-    if (this.state === 'recording') return;
+    if (this.state === 'recording' || this.cooldownRemainingMs(now) > 0) return;
     this.state = 'recording';
     this.startedAt = now;
     this.startedDate = new Date();
@@ -49,6 +50,7 @@ export class ExtractionSession {
   ingest(pressure, now) {
     if (!Number.isFinite(pressure) || pressure < 0) return;
     this.pressure = pressure;
+    if (this.cooldownRemainingMs(now) > 0) return;
     if (this.state !== 'recording') {
       if (this.state === 'completed' && !this.armed) {
         if (pressure <= REARM_PRESSURE_BAR) {
@@ -86,6 +88,11 @@ export class ExtractionSession {
 
   elapsed(now) {
     return this.startedAt === null ? 0 : ((this.endedAt ?? now) - this.startedAt) / 1000;
+  }
+
+  cooldownRemainingMs(now) {
+    if (this.state !== 'completed' || this.endedAt === null) return 0;
+    return Math.max(0, RESTART_COOLDOWN_MS - (now - this.endedAt));
   }
 }
 

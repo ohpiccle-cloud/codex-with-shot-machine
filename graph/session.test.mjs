@@ -21,8 +21,8 @@ test('1bar 초과 자동 시작, 상대 시간 기록, 수동 완료 후 고압 
   assert.equal(s.state, 'completed');
   assert.equal(s.elapsed(9000), 2);
   assert.equal(s.points.length, 2);
-  settlePressure(s, 4000);
-  s.ingest(1.2, 5200);
+  settlePressure(s, 34000);
+  s.ingest(1.2, 35200);
   assert.equal(s.state, 'recording');
   assert.deepEqual(s.points, [{ time: 0, pressure: 1.2 }]);
 });
@@ -36,9 +36,9 @@ test('무압 수동 시작, 완료 및 다음 수동 시작', () => {
   assert.equal(s.points[1].time, 0.5);
   s.finish(2000);
   assert.equal(s.state, 'completed');
-  s.start(3000);
+  s.start(32000);
   assert.equal(s.points.length, 1);
-  assert.equal(s.elapsed(3500), 0.5);
+  assert.equal(s.elapsed(32500), 0.5);
 });
 
 test('분할·복수 시리얼 줄 처리 및 잘못된 값 무시', () => {
@@ -67,10 +67,10 @@ test('완료 후 피크와 최종 시간을 유지하고 새 추출에서 초기
   assert.equal(s.peakPressure, 9.45);
   assert.equal(s.elapsed(9000), 3);
   assert.ok(s.startedDate instanceof Date);
-  settlePressure(s, 6000);
-  s.ingest(1.2, 7200);
+  settlePressure(s, 36000);
+  s.ingest(1.2, 37200);
   assert.equal(s.peakPressure, 1.2);
-  assert.equal(s.elapsed(7200), 0);
+  assert.equal(s.elapsed(37200), 0);
 });
 
 test('200ms에 0.4bar 하강 시 자동 완료, 마지막 점과 피크 및 최종 시간 유지', () => {
@@ -87,8 +87,8 @@ test('200ms에 0.4bar 하강 시 자동 완료, 마지막 점과 피크 및 최�
   s.ingest(1, 1600);
   s.ingest(2, 1800);
   assert.equal(s.state, 'completed');
-  settlePressure(s, 2000);
-  s.ingest(2, 3200);
+  settlePressure(s, 32000);
+  s.ingest(2, 33200);
   assert.equal(s.state, 'recording');
   assert.equal(s.completionReason, null);
 });
@@ -138,10 +138,10 @@ test('완료 후 잔압 하강과 1bar 부근 반등은 그래프·시간·피�
     assert.equal(s.peakPressure, 9);
     assert.equal(s.startedDate, startedDate);
   }
-  settlePressure(s, 2400);
-  s.ingest(1, 3600);
+  settlePressure(s, 32400);
+  s.ingest(1, 33600);
   assert.equal(s.state, 'completed');
-  s.ingest(1.01, 3800);
+  s.ingest(1.01, 33800);
   assert.equal(s.state, 'recording');
   assert.deepEqual(s.points, [{ time: 0, pressure: 1.01 }]);
 });
@@ -150,28 +150,64 @@ test('저압 1초 미만, 압력 반등, 수신 공백은 자동 재시작을 �
   const s = new ExtractionSession();
   s.ingest(9, 0);
   s.ingest(8, 200);
-  s.ingest(0.05, 400);
-  s.ingest(0.05, 1200);
-  s.ingest(1.2, 1400);
+  s.ingest(0.05, 30400);
+  s.ingest(0.05, 31200);
+  s.ingest(1.2, 31400);
   assert.equal(s.state, 'completed');
-  s.ingest(0.05, 1600);
-  s.ingest(1.2, 2000);
-  s.ingest(0.05, 2200);
-  s.ingest(0.05, 2800);
-  s.ingest(1.2, 3000);
+  s.ingest(0.05, 31600);
+  s.ingest(1.2, 32000);
+  s.ingest(0.05, 32200);
+  s.ingest(0.05, 32800);
+  s.ingest(1.2, 33000);
   assert.equal(s.state, 'completed');
-  s.ingest(0.05, 3200);
-  s.ingest(0.05, 5000);
-  s.ingest(1.2, 5200);
+  s.ingest(0.05, 33200);
+  s.ingest(0.05, 35000);
+  s.ingest(1.2, 35200);
   assert.equal(s.state, 'completed');
 });
 
-test('잔압이 남아 있어도 사용자가 새 추출을 수동 시작할 수 있음', () => {
+test('30초 경과 후 잔압이 남아 있어도 수동 시작할 수 있음', () => {
   const s = new ExtractionSession();
   s.ingest(9, 0);
   s.ingest(8, 200);
-  s.start(400);
+  s.start(30200);
   assert.equal(s.state, 'recording');
   assert.equal(s.completionReason, null);
   assert.deepEqual(s.points, [{ time: 0, pressure: 8 }]);
+});
+
+test('완료 후 30초 미만에는 자동·수동 시작을 모두 막고 그래프를 유지', () => {
+  for (const automatic of [true, false]) {
+    const s = new ExtractionSession();
+    s.ingest(9, 0);
+    if (automatic) s.ingest(8, 200);
+    else s.finish(200);
+    const points = s.points.slice();
+    assert.equal(s.cooldownRemainingMs(200), 30000);
+    settlePressure(s, 400);
+    s.ingest(2, 1600);
+    for (const now of [1600, 15000, 30199]) {
+      s.start(now);
+      assert.equal(s.state, 'completed');
+      assert.deepEqual(s.points, points);
+      assert.equal(s.elapsed(now), 0.2);
+    }
+    assert.equal(s.cooldownRemainingMs(30199), 1);
+    assert.equal(s.cooldownRemainingMs(30200), 0);
+    s.start(30200);
+    assert.equal(s.state, 'recording');
+  }
+});
+
+test('30초 만료만으로 자동 시작하지 않고 이후 저압 안정과 새 상승을 기다림', () => {
+  const s = new ExtractionSession();
+  s.ingest(9, 0);
+  s.ingest(8, 200);
+  settlePressure(s, 28000);
+  s.ingest(2, 30000);
+  s.ingest(2, 30200);
+  assert.equal(s.state, 'completed');
+  settlePressure(s, 30400);
+  s.ingest(1.01, 31600);
+  assert.equal(s.state, 'recording');
 });

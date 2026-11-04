@@ -25,8 +25,10 @@ function refresh() {
   if (session.completionReason === 'pressure-drop') $('state').textContent += ' (자동)';
   $('state').style.color = stateColors[session.state];
   $('chart-panel').dataset.state = session.state;
-  $('toggle').textContent = session.state === 'recording' ? '추출 완료 (Space)' : '추출 시작 (Space)';
-  $('toggle').disabled = !connected || (stale && session.state !== 'recording');
+  const cooldown = session.cooldownRemainingMs(performance.now());
+  $('toggle').textContent = cooldown > 0 ? `재시작 대기 (${Math.ceil(cooldown / 1000)}초)`
+    : session.state === 'recording' ? '추출 완료 (Space)' : '추출 시작 (Space)';
+  $('toggle').disabled = cooldown > 0 || !connected || (stale && session.state !== 'recording');
   $('download').disabled = saving || session.state !== 'completed' || session.points.length === 0;
   if (connected && !closing) {
     const delay = lastDataAt === null ? '압력 데이터 대기 중' : `압력 수신 중단 · 마지막 수신 ${Math.floor((performance.now() - lastDataAt) / 1000)}초 전`;
