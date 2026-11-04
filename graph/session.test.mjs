@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ExtractionSession, PressureLines } from './session.mjs';
 
 function settlePressure(session, start) {
-  for (let offset = 0; offset <= 1000; offset += 200) session.ingest(0.05, start + offset);
+  for (let offset = 0; offset <= 1000; offset += 200) session.ingest(1.0, start + offset);
 }
 
 test('1bar 초과 자동 시작, 상대 시간 기록, 수동 완료 후 고압 재시작 방지', () => {
@@ -155,7 +155,7 @@ test('저압 1초 미만, 압력 반등, 수신 공백은 자동 재시작을 �
   s.ingest(1.2, 1400);
   assert.equal(s.state, 'completed');
   s.ingest(0.05, 1600);
-  s.ingest(0.2, 2000);
+  s.ingest(1.2, 2000);
   s.ingest(0.05, 2200);
   s.ingest(0.05, 2800);
   s.ingest(1.2, 3000);

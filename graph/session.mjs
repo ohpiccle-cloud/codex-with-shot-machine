@@ -1,6 +1,6 @@
 export const AUTO_START_BAR = 1.0;
 export const AUTO_FINISH_DROP_BAR_PER_SECOND = 2.0;
-export const REARM_PRESSURE_BAR = 0.1;
+export const REARM_PRESSURE_BAR = 1.0;
 export const REARM_STABLE_MS = 1000;
 
 export class ExtractionSession {
@@ -40,7 +40,7 @@ export class ExtractionSession {
     this.endedAt = now;
     this.state = 'completed';
     this.completionReason = reason;
-    // A completed shot remains locked until pressure has settled near zero.
+    // A completed shot remains locked until pressure has settled at or below the restart threshold.
     this.armed = false;
     this.rearmLowSince = null;
     this.lastRearmSampleAt = null;
