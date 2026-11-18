@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>추출 압력 그래프</title>
-  <link rel="stylesheet" href="style.css?v=2026-11-04-r2">
+  <link rel="stylesheet" href="style.css?v=2026-11-18">
 </head>
 <body>
   <main>
     <header>
-      <div><p class="eyebrow">SHOT · PRESSURE MONITOR · v2026.11.04-r2</p><h1>추출 그래프</h1></div>
+      <div><p class="eyebrow">SHOT · PRESSURE MONITOR · v2026.11.18</p><h1>추출 그래프</h1></div>
       <button id="connect">아두이노 연결</button>
     </header>
     <p id="connection" role="status">USB로 보드를 연결한 뒤 아두이노 연결을 누르세요.</p>
@@ -45,9 +45,15 @@
   <dialog id="history-preview" aria-labelledby="preview-title">
     <div class="preview-heading"><h2 id="preview-title">추출 기록</h2><button id="preview-close" class="secondary">닫기</button></div>
     <p id="preview-status" class="note" role="status"></p>
+    <section class="memo">
+      <label for="history-notes">추출 메모</label>
+      <textarea id="history-notes" rows="4" maxlength="1000" disabled></textarea>
+      <p id="history-notes-status" class="note" role="status"></p>
+      <button id="history-notes-save" type="button" disabled>메모 저장</button>
+    </section>
     <img id="preview-image" alt="저장된 추출 그래프와 메모">
-    <a id="preview-download" class="image-link" download>이미지 다운로드</a>
+    <a id="preview-download" class="image-link" download>원본 이미지 다운로드</a>
   </dialog>
-  <script type="module" src="app.mjs?v=2026-11-04-r2"></script>
+  <script type="module" src="app.mjs?v=2026-11-18"></script>
 </body>
 </html>

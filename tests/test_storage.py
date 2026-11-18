@@ -6,6 +6,7 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 
 spec = importlib.util.spec_from_file_location('open_graph', Path(__file__).resolve().parents[1] / 'open_graph.py')
@@ -65,8 +66,34 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(response.headers['Cache-Control'], 'no-store')
             return json.load(response)['records']
 
+    def test_history_notes_edit_preserves_legacy_image_and_supports_clearing(self):
+        record = self.save()
+        image = self.directory / Path(record['path']).name
+        url = self.url + '/api/extractions/notes/' + image.name
+        with urllib.request.urlopen(url) as response:
+            self.assertIsNone(json.load(response)['notes'])
+        for notes in ['도징 18g\n물온도 93°C', '']:
+            request = urllib.request.Request(url, data=json.dumps(notes).encode('utf-8'),
+                                             headers={'X-Shot-Save': '1'})
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(json.load(response)['notes'], notes)
+            with urllib.request.urlopen(url) as response:
+                self.assertEqual(json.load(response)['notes'], notes)
+            self.assertEqual(image.with_suffix('.txt').read_text(encoding='utf-8'), notes)
+            self.assertEqual(image.read_bytes(), PNG)
+
+    def test_new_record_stores_original_notes_for_editing(self):
+        notes = '도징 18g\n추출 수율 40%'
+        request = urllib.request.Request(self.url + '/api/extractions?date=2026-11-18', data=PNG,
+                                         headers={'X-Shot-Save': '1', 'Content-Type': 'image/png',
+                                                  'X-Shot-Notes': urllib.parse.quote(notes)})
+        with urllib.request.urlopen(request) as response:
+            filename = Path(json.load(response)['path']).name
+        with urllib.request.urlopen(self.url + '/api/extractions/notes/' + filename) as response:
+            self.assertEqual(json.load(response)['notes'], notes)
+
     def test_app_files_always_refresh_even_with_future_cached_timestamp(self):
-        for path in ['/', '/app.mjs?v=2026-11-04-r2', '/session.mjs?v=2026-11-04-r2']:
+        for path in ['/', '/app.mjs?v=2026-11-18', '/session.mjs?v=2026-11-18']:
             request = urllib.request.Request(self.url + path, headers={
                 'If-Modified-Since': 'Wed, 01 Jan 2031 00:00:00 GMT',
             })

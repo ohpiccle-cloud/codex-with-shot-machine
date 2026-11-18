@@ -1,8 +1,8 @@
-import { ExtractionSession } from './session.mjs?v=2026-11-04-r2';
-import { receivePressure } from './serial.mjs?v=2026-11-04-r2';
-import { chooseAutomaticPort, portIdentity } from './autoconnect.mjs?v=2026-11-04-r2';
-import './window.mjs?v=2026-11-04-r2';
-import { restoreCompleted, persistCompleted } from './persistence.mjs?v=2026-11-04-r2';
+import { ExtractionSession } from './session.mjs?v=2026-11-18';
+import { receivePressure } from './serial.mjs?v=2026-11-18';
+import { chooseAutomaticPort, portIdentity } from './autoconnect.mjs?v=2026-11-18';
+import './window.mjs?v=2026-11-18';
+import { restoreCompleted, persistCompleted } from './persistence.mjs?v=2026-11-18';
 
 let restored;
 try { restored = restoreCompleted(localStorage, performance.now(), Date.now()); } catch { /* 브라우저 저장소 사용 불가 */ }
@@ -264,12 +264,17 @@ $('download').addEventListener('click', async () => {
   $('save-status').textContent = '그래프와 메모를 저장하고 있습니다…';
   refresh();
   try {
+    const notes = $('notes').value;
     const record = createRecordImage();
     const blob = await new Promise(resolve => record.toBlob(resolve, 'image/png'));
     if (!blob) throw new Error('이미지를 만들지 못했습니다.');
     const response = await fetch(`/api/extractions?date=${date}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'image/png', 'X-Shot-Save': '1' },
+      headers: {
+        'Content-Type': 'image/png',
+        'X-Shot-Save': '1',
+        'X-Shot-Notes': encodeURIComponent(notes),
+      },
       body: blob,
     });
     if (response.status === 404 || response.status === 501) {
@@ -288,6 +293,62 @@ $('download').addEventListener('click', async () => {
 });
 
 let historyRequest = 0;
+let activePreview = null;
+
+async function showHistoryRecord(record, title) {
+  const preview = { url: `/api/extractions/notes/${encodeURIComponent(record.filename)}` };
+  activePreview = preview;
+  $('preview-title').textContent = title;
+  $('preview-status').textContent = '';
+  $('preview-image').src = record.url;
+  $('preview-download').href = record.url;
+  $('preview-download').download = record.filename;
+  $('history-notes').value = '';
+  $('history-notes').disabled = true;
+  $('history-notes-save').disabled = true;
+  $('history-notes-status').textContent = '메모를 불러오는 중…';
+  $('history-preview').showModal();
+  try {
+    const response = await fetch(preview.url);
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
+    if (activePreview !== preview) return;
+    $('history-notes').value = result.notes ?? '';
+    $('history-notes-status').textContent = result.notes === null
+      ? '기존 메모는 아래 원본 이미지에 있습니다. 내용을 옮기거나 새 메모를 작성하세요.'
+      : '수정한 메모는 이 기록에 별도로 저장됩니다.';
+    $('history-notes').disabled = false;
+    $('history-notes-save').disabled = false;
+  } catch (error) {
+    if (activePreview === preview) $('history-notes-status').textContent = `메모를 불러오지 못했습니다. ${error.message}`;
+  }
+}
+
+$('history-notes-save').addEventListener('click', async () => {
+  const preview = activePreview;
+  if (!preview || $('history-notes-save').disabled) return;
+  const notes = $('history-notes').value;
+  $('history-notes').disabled = true;
+  $('history-notes-save').disabled = true;
+  $('history-notes-status').textContent = '메모 저장 중…';
+  try {
+    const response = await fetch(preview.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Shot-Save': '1' },
+      body: JSON.stringify(notes),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
+    if (activePreview === preview) $('history-notes-status').textContent = '메모를 저장했습니다.';
+  } catch (error) {
+    if (activePreview === preview) $('history-notes-status').textContent = `메모를 저장하지 못했습니다. ${error.message}`;
+  } finally {
+    if (activePreview === preview) {
+      $('history-notes').disabled = false;
+      $('history-notes-save').disabled = false;
+    }
+  }
+});
 
 async function loadHistory() {
   const request = ++historyRequest;
@@ -310,16 +371,9 @@ async function loadHistory() {
       const image = document.createElement('img');
       image.src = record.url; image.alt = ''; image.loading = 'lazy';
       const label = document.createElement('span'); label.textContent = title;
-      const hint = document.createElement('small'); hint.textContent = '그래프와 메모 보기';
+      const hint = document.createElement('small'); hint.textContent = '그래프 보기 · 메모 편집';
       button.append(image, label, hint);
-      button.addEventListener('click', () => {
-        $('preview-title').textContent = title;
-        $('preview-status').textContent = '';
-        $('preview-image').src = record.url;
-        $('preview-download').href = record.url;
-        $('preview-download').download = record.filename;
-        $('history-preview').showModal();
-      });
+      button.addEventListener('click', () => showHistoryRecord(record, title));
       list.append(button);
     }
     $('history-list').replaceChildren(list);
@@ -335,6 +389,7 @@ async function loadHistory() {
 
 $('history-refresh').addEventListener('click', loadHistory);
 $('preview-close').addEventListener('click', () => $('history-preview').close());
+$('history-preview').addEventListener('close', () => { activePreview = null; });
 $('preview-image').addEventListener('error', () => {
   $('preview-status').textContent = '이미지를 읽지 못했습니다. 파일이 삭제되거나 이동했는지 확인하고 히스토리를 새로고침하세요.';
 });

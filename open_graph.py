@@ -11,15 +11,30 @@ import re
 import shutil
 import subprocess
 import threading
+from tempfile import NamedTemporaryFile
 import time
 import sys
 import webbrowser
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 
 GRAPH_DIRECTORY = Path(__file__).resolve().parent / 'graph'
 DATA_DIRECTORY = Path(__file__).resolve().parent / 'data'
 RECORD_NAME = re.compile(r'(\d{4}-\d{2}-\d{2})_(\d+)\.png')
+NOTES_ROUTE = '/api/extractions/notes/'
+MAX_NOTES_LENGTH = 1000
+
+
+def write_notes(path, notes):
+    with NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, delete=False) as output:
+        temporary = Path(output.name)
+        try:
+            output.write(notes)
+            output.close()
+            temporary.replace(path)
+        finally:
+            output.close()
+            temporary.unlink(missing_ok=True)
 
 
 class BrowserWindows:
@@ -71,6 +86,9 @@ class GraphHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urlsplit(self.path).path
         directory = self.server.data_directory
+        if path.startswith(NOTES_ROUTE):
+            self.record_notes(path)
+            return
         if path == '/api/extractions':
             try:
                 records = []
@@ -113,7 +131,8 @@ class GraphHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         address = urlsplit(self.path)
-        if address.path not in ('/api/extractions', '/api/window/open', '/api/window/close'):
+        if (address.path not in ('/api/extractions', '/api/window/open', '/api/window/close')
+                and not address.path.startswith(NOTES_ROUTE)):
             self.respond_json(404, {'error': '저장 경로를 찾을 수 없습니다.'})
             return
         hosts = {'127.0.0.1:{}'.format(self.server.server_port),
@@ -123,6 +142,9 @@ class GraphHandler(SimpleHTTPRequestHandler):
                 or (address.path != '/api/window/close' and self.headers.get('X-Shot-Save') != '1')
                 or (origin is not None and origin not in {'http://' + host for host in hosts})):
             self.respond_json(403, {'error': '이 프로그램 화면에서만 저장할 수 있습니다.'})
+            return
+        if address.path.startswith(NOTES_ROUTE):
+            self.record_notes(address.path, update=True)
             return
         if address.path.startswith('/api/window/'):
             try:
@@ -149,6 +171,10 @@ class GraphHandler(SimpleHTTPRequestHandler):
                 raise ValueError('Invalid image size')
             if self.headers.get('Content-Type') != 'image/png':
                 raise ValueError('Invalid image type')
+            notes_header = self.headers.get('X-Shot-Notes')
+            notes = unquote(notes_header, errors='strict') if notes_header is not None else None
+            if notes is not None and len(notes) > MAX_NOTES_LENGTH:
+                raise ValueError('Notes too long')
         except ValueError:
             self.respond_json(400, {'error': '날짜 또는 PNG 이미지 형식이 올바르지 않습니다.'})
             return
@@ -175,6 +201,8 @@ class GraphHandler(SimpleHTTPRequestHandler):
             try:
                 with output:
                     output.write(image)
+                if notes is not None:
+                    write_notes(target.with_suffix('.txt'), notes)
             except OSError:
                 target.unlink(missing_ok=True)
                 raise
@@ -182,6 +210,45 @@ class GraphHandler(SimpleHTTPRequestHandler):
             self.respond_json(500, {'error': 'data 폴더의 쓰기 권한과 디스크 여유 공간을 확인해주세요.'})
             return
         self.respond_json(201, {'path': 'data/' + filename, 'number': number})
+
+    def record_notes(self, path, update=False):
+        filename = path[len(NOTES_ROUTE):]
+        if not RECORD_NAME.fullmatch(filename):
+            self.respond_json(404, {'error': '추출 기록을 찾을 수 없습니다.'})
+            return
+        image = self.server.data_directory / filename
+        notes_path = image.with_suffix('.txt')
+        try:
+            if image.is_symlink() or not image.is_file():
+                self.respond_json(404, {'error': '추출 기록을 찾을 수 없습니다.'})
+                return
+            if update:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 8192:
+                    raise ValueError('Invalid notes size')
+                self.connection.settimeout(5)
+                payload = self.rfile.read(length)
+                if len(payload) != length:
+                    raise ValueError('Incomplete notes')
+                notes = json.loads(payload)
+                if not isinstance(notes, str) or len(notes) > MAX_NOTES_LENGTH:
+                    raise ValueError('Invalid notes')
+                notes.encode('utf-8')
+                write_notes(notes_path, notes)
+            else:
+                notes = None
+                if not notes_path.is_symlink():
+                    try:
+                        notes = notes_path.read_text(encoding='utf-8')
+                    except FileNotFoundError:
+                        pass
+        except ValueError:
+            self.respond_json(400, {'error': '메모 형식이나 길이를 확인해주세요.'})
+            return
+        except OSError:
+            self.respond_json(500, {'error': 'data 폴더의 메모 파일에 접근할 수 없습니다.'})
+            return
+        self.respond_json(200, {'notes': notes})
 
 
 def create_server(data_directory=DATA_DIRECTORY, port=0):
