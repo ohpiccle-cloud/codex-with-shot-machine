@@ -15,8 +15,11 @@ header p{color:#d4e1f1;margin-top:.4rem}
 .actions{justify-content:flex-end}
 main{padding-bottom:2rem}
 button,summary,input,textarea,select{font:inherit;color:inherit}
-button,summary{border:1px solid #bdcad8;border-radius:8px;background:#fff;color:#243d58;padding:.55rem .75rem;cursor:pointer;font-weight:650;white-space:nowrap}
-button:hover:not(:disabled),summary:hover{background:var(--soft)}
+button,summary,.graph-link{border:1px solid #bdcad8;border-radius:8px;background:#fff;color:#243d58;padding:.55rem .75rem;cursor:pointer;font-weight:650;white-space:nowrap}
+button:hover:not(:disabled),summary:hover,.graph-link:hover{background:var(--soft)}
+.graph-link{display:inline-flex;align-items:center;gap:.45rem;text-decoration:none}
+.graph-link-icon{display:block;position:relative;width:1em;height:1em;border:solid currentColor;border-width:0 0 1px 1px;color:var(--brand)}
+.graph-link-icon::before{content:"";position:absolute;inset:0 0 2px 2px;background:currentColor;clip-path:polygon(0 83%,38% 39%,64% 58%,90% 12%,100% 24%,68% 76%,41% 57%,9% 95%)}
 button:disabled{opacity:.55;cursor:default}
 .primary{color:#fff;background:var(--brand);border-color:var(--brand)}
 .primary:hover:not(:disabled){background:#103c7a}
