@@ -44,3 +44,5 @@
 .erp-multiline{white-space:pre-wrap}
 @media(max-width:760px){.erp-overview{grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}.erp-overview div{padding:.7rem}.erp-workspace{grid-template-columns:minmax(0,1fr)}.erp-detail{min-height:150px}}
 @media(max-width:440px){.erp-detail .contact{grid-template-columns:1fr}.erp-order-row-head{flex-wrap:wrap}.erp-fields label{font-size:.875rem}}
+.erp-delete-order{margin-inline-start:auto;padding:.25rem .55rem;color:#98272b;border-color:#e2b8ba;font-size:.85rem}
+.erp-delete-order:hover:not(:disabled){background:#fff1f1}

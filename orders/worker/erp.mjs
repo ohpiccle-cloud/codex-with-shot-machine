@@ -394,6 +394,25 @@ export async function erpApi(request, db, owner, path, body) {
     erpObject(body);
     if (kind === 'orders') return erpJson({id: await erpSaveOrder(db, owner, body)});
     if (kind === 'remove') {
+      if (body.kind === 'orders') {
+        const orderId = erpId(body.id, '삭제할 주문');
+        const revision = erpInteger(body.revision, '주문 변경 번호', 1, Number.MAX_SAFE_INTEGER);
+        const matchesOrder = 'EXISTS (SELECT 1 FROM erp_orders WHERE owner_id=? AND id=? AND revision=?)';
+        const order = [owner, orderId, revision];
+        const children = ['erp_feedback', 'erp_services', 'erp_order_items'];
+        const results = await db.batch([
+          db.prepare('DELETE FROM erp_shipments WHERE owner_id=? AND order_item_id IN ' +
+            '(SELECT id FROM erp_order_items WHERE owner_id=? AND order_id=?) AND ' + matchesOrder)
+            .bind(owner, owner, orderId, ...order),
+          ...children.map(table => db.prepare('DELETE FROM ' + table +
+            ' WHERE owner_id=? AND order_id=? AND ' + matchesOrder).bind(owner, orderId, ...order)),
+          db.prepare('DELETE FROM erp_orders WHERE owner_id=? AND id=? AND revision=?').bind(...order)
+        ]);
+        if (!results.at(-1).meta.changes) {
+          throw new ErpInputError('주문이 변경되었거나 이미 삭제되었습니다. 목록을 다시 열어 확인해 주세요.',409);
+        }
+        return erpJson({ok: true});
+      }
       if (!['shipments','feedback','services'].includes(body.kind)) {
         throw new ErpInputError('삭제할 기록 종류를 확인하세요.');
       }

@@ -33,6 +33,7 @@
   let editing = null;
   let refreshing = null;
   let waiting = false;
+  let deletingOrder = false;
   let ready = false;
 
   function node(tag, text, className) {
@@ -184,6 +185,9 @@
       block.append(heading,node('p',order.ordered_on + ' · ' + itemLabel + (row.items.length > 1 ? ' 외 ' + (row.items.length - 1) + '종' : ''),'muted'));
       const tags = node('div',undefined,'erp-order-meta');
       tags.append(tag(order.status),tag(row.payment),tag(row.shipping));
+      const remove = button('삭제',event => removeOrder(order,event.currentTarget),'erp-delete-order');
+      remove.setAttribute('aria-label',order.order_no + ' 삭제');
+      tags.append(remove);
       block.append(tags);
       list.append(block);
     }
@@ -191,6 +195,31 @@
 
   function customerName(order) {
     return order.customer_name || cache.customers.get(order.customer_id)?.name || '고객';
+  }
+
+  async function removeOrder(order, control) {
+    if (deletingOrder || !window.confirm(order.order_no + ' 주문을 삭제할까요?\n\n' +
+      '주문 상품, 출고, 만족도, A/S 내역도 함께 삭제됩니다. 고객 정보와 추출 기록은 보관됩니다.')) return;
+    deletingOrder = true;
+    control.disabled = true;
+    try {
+      await base().api('erp/remove',{kind:'orders',id:order.id,revision:order.revision});
+      if (selectedId === order.id) selectedId = null;
+      data.orders = data.orders.filter(entry => entry.id !== order.id);
+      render();
+      try {
+        await reload();
+        base().notice('주문을 삭제했습니다.');
+      } catch {
+        base().notice('주문을 삭제했습니다. 최신 목록을 보려면 주문 탭을 다시 열어 주세요.',true);
+      }
+      search.focus();
+    } catch (error) {
+      base().notice(error.message,true);
+    } finally {
+      deletingOrder = false;
+      control.disabled = false;
+    }
   }
 
   function selectOrder(id, moveFocus = true) {
