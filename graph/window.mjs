@@ -16,5 +16,7 @@ function closed() {
     void fetch('/api/window/close', { method: 'POST', body: closingToken, keepalive: true }).catch(() => {});
   }
 }
-window.addEventListener('pageshow', opened);
-window.addEventListener('pagehide', closed);
+if (window === window.top) {
+  window.addEventListener('pageshow', opened);
+  window.addEventListener('pagehide', closed);
+}

@@ -192,16 +192,27 @@
     }
   }
 
-  function shipmentDialog(context, shipment) {
+  let loadingShipment = false;
+  async function shipmentDialog(context, shipment) {
     const availableItems = context.items.filter(item => itemRemaining(context,item,shipment) > 0);
-    if (!availableItems.length) return;
+    if (!availableItems.length || loadingShipment || pending) return;
+    loadingShipment = true;
+    try {
+      await window.erpData.refresh();
+    } catch (error) {
+      window.erpData.notice(error.message,true);
+      return;
+    } finally {
+      loadingShipment = false;
+    }
+    const extracts = window.erpData.getRecords().extracts;
     const itemId = shipment?.order_item_id ?? availableItems[0].id;
     const options = availableItems.map(item => [item.id,itemLabel(item) + ' · 출고 가능 ' +
       number.format(itemRemaining(context,item,shipment)) + '개']);
     const fields = [
       {name:'order_item_id',label:'주문 상품',type:'select',options,required:true,value:itemId,full:true},
       {name:'extract_id',label:'추출 기록',type:'select',full:true,value:shipment?.extract_id,
-        options:[['','연결 없이 기록'],...context.extracts.map(extract => [extract.id,extract.title])],
+        options:[['','연결 없이 기록'],...extracts.map(extract => [extract.id,extract.title])],
         help:'실제로 출고한 상품에 해당하는 추출 기록을 선택하세요.'},
       {name:'quantity',label:'출고 수량',type:'number',required:true,min:1,step:1,value:shipment?.quantity},
       dateField('shipped_on','출고 날짜',shipment?.shipped_on),
@@ -219,9 +230,12 @@
         controls.order_item_id.addEventListener('change',update);
         update();
       },
-      onSubmit:values => window.erpData.api('erp/shipments',{
-        ...values,id:shipment?.id,extract_id:values.extract_id || null,quantity:Number(values.quantity)
-      }),
+      onSubmit:async values => {
+        const extract_id = await window.erpData.registerExtract(values.extract_id);
+        return window.erpData.api('erp/shipments',{
+          ...values,id:shipment?.id,extract_id,quantity:Number(values.quantity)
+        });
+      },
       reload:context.reload,
       success:'출고 기록을 저장했습니다.'
     });

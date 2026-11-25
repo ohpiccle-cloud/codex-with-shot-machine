@@ -1,7 +1,7 @@
 import { ExtractionSession } from './session.mjs?v=2026-11-18';
 import { receivePressure } from './serial.mjs?v=2026-11-18';
 import { chooseAutomaticPort, portIdentity } from './autoconnect.mjs?v=2026-11-18';
-import './window.mjs?v=2026-11-18';
+import './window.mjs?v=2026-11-25-r2';
 import { restoreCompleted, persistCompleted } from './persistence.mjs?v=2026-11-18';
 
 let restored;
@@ -62,6 +62,7 @@ function draw() {
   const ratio = window.devicePixelRatio || 1;
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
+  if (!width || !height) return;
   if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
@@ -294,16 +295,54 @@ $('download').addEventListener('click', async () => {
 
 let historyRequest = 0;
 let activePreview = null;
+const ordersFrame = $('orders-frame');
+const graphView = document.querySelector('main');
+const previewDialog = $('history-preview');
+let ordersLoaded = false;
+let pendingOrderFilename = null;
+
+function notifyOrders() {
+  ordersFrame.contentWindow.postMessage({
+    type: 'shot:show-orders', filename: pendingOrderFilename,
+  }, location.origin);
+  pendingOrderFilename = null;
+}
+
+function openOrders(filename = null) {
+  pendingOrderFilename = filename;
+  if (previewDialog.open) previewDialog.close();
+  graphView.hidden = true;
+  ordersFrame.hidden = false;
+  if (!ordersFrame.hasAttribute('src')) ordersFrame.src = '/orders/';
+  else if (ordersLoaded) notifyOrders();
+}
+
+ordersFrame.addEventListener('load', () => {
+  if (!ordersFrame.hasAttribute('src')) return;
+  ordersLoaded = true;
+  if (!ordersFrame.hidden) notifyOrders();
+});
+window.addEventListener('message', event => {
+  if (event.origin !== location.origin || event.source !== ordersFrame.contentWindow
+      || event.data?.type !== 'shot:show-graph') return;
+  ordersFrame.hidden = true;
+  graphView.hidden = false;
+  refresh();
+  $('open-orders').focus();
+});
+$('open-orders').addEventListener('click', () => openOrders());
+$('preview-order').addEventListener('click', () => {
+  if (activePreview) openOrders(activePreview.filename);
+});
 
 async function showHistoryRecord(record, title) {
-  const preview = { url: `/api/extractions/notes/${encodeURIComponent(record.filename)}` };
+  const preview = { filename: record.filename, url: `/api/extractions/notes/${encodeURIComponent(record.filename)}` };
   activePreview = preview;
   $('preview-title').textContent = title;
   $('preview-status').textContent = '';
   $('preview-image').src = record.url;
   $('preview-download').href = record.url;
   $('preview-download').download = record.filename;
-  $('preview-order').href = '/orders/?shot=' + encodeURIComponent(record.filename);
   $('history-notes').value = '';
   $('history-notes').disabled = true;
   $('history-notes-save').disabled = true;
@@ -389,8 +428,18 @@ async function loadHistory() {
 }
 
 $('history-refresh').addEventListener('click', loadHistory);
-$('preview-close').addEventListener('click', () => $('history-preview').close());
-$('history-preview').addEventListener('close', () => { activePreview = null; });
+$('preview-close').addEventListener('click', () => previewDialog.close());
+let pointerStartedOutside = false;
+function isPreviewBackdrop(event) {
+  const bounds = previewDialog.getBoundingClientRect();
+  return event.target === previewDialog && (event.clientX < bounds.left || event.clientX >= bounds.right
+    || event.clientY < bounds.top || event.clientY >= bounds.bottom);
+}
+previewDialog.addEventListener('pointerdown', event => { pointerStartedOutside = isPreviewBackdrop(event); });
+previewDialog.addEventListener('click', event => {
+  if (pointerStartedOutside && isPreviewBackdrop(event)) previewDialog.close();
+});
+previewDialog.addEventListener('close', () => { activePreview = null; pointerStartedOutside = false; });
 $('preview-image').addEventListener('error', () => {
   $('preview-status').textContent = '이미지를 읽지 못했습니다. 파일이 삭제되거나 이동했는지 확인하고 히스토리를 새로고침하세요.';
 });

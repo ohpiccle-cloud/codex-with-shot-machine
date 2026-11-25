@@ -56,8 +56,33 @@ async function api(url, body) {
 }
 
 async function refresh() {
-  records = await api('records');
+  const [stored, history] = await Promise.all([
+    api('records'),
+    fetch('/api/extractions').then(response => {
+      if (!response.ok) throw new Error('추출 히스토리를 불러오지 못했습니다.');
+      return response.json();
+    }),
+  ]);
+  const registered = new Set(stored.extracts.map(record => record.id));
+  const historyOnly = history.records.filter(record => !registered.has(record.orderExtractId)).map(record => ({
+    id: record.orderExtractId,
+    title: record.filename.replace(/\.png$/, ''),
+    source: record.filename,
+    created_at: record.date,
+    data: { __shot_filename: record.filename },
+    historyOnly: true,
+  }));
+  records = { ...stored, extracts: [...historyOnly, ...stored.extracts] };
   render();
+}
+
+async function registerExtract(id) {
+  const record = records.extracts.find(extract => extract.id === id);
+  if (record?.historyOnly) {
+    const result = await api('shot-extract', { filename: record.source });
+    return result.id;
+  }
+  return id || null;
 }
 
 function showTab(next, id = null) {
@@ -343,7 +368,8 @@ bindSubmit(extractForm,async () => {
   return () => { showTab('extracts'); notice(result.count + '건의 추출 기록을 저장했습니다.'); };
 });
 bindSubmit(linkForm,async fields => {
-  await api('links',{...fields,customer_id:linkCustomerId,quantity:fields.quantity ? Number(fields.quantity) : null});
+  const extract_id = await registerExtract(fields.extract_id);
+  await api('links',{...fields,extract_id,customer_id:linkCustomerId,quantity:fields.quantity ? Number(fields.quantity) : null});
   return () => notice('고객과 추출 기록을 연결했습니다.');
 });
 
@@ -367,7 +393,7 @@ async function downloadBackup() {
 }
 
 window.erpData = {
-  getRecords: () => records, api, notice,
+  getRecords: () => records, api, notice, refresh, registerExtract,
   openCustomer: id => showTab('customers',id),
   openExtract: id => showTab('extracts',id)
 };
@@ -376,7 +402,29 @@ byId('order-tab').addEventListener('click',() => {
   Promise.resolve(showTab('orders')).catch(error => notice(error.message,true));
 });
 byId('customer-tab').addEventListener('click',() => showTab('customers'));
-byId('extract-tab').addEventListener('click',() => showTab('extracts'));
+byId('extract-tab').addEventListener('click',async () => {
+  showTab('extracts');
+  try { await refresh(); }
+  catch (error) { notice(error.message,true); }
+});
+byId('return-to-graph').addEventListener('click',event => {
+  if (window.parent === window) return;
+  event.preventDefault();
+  window.parent.postMessage({type:'shot:show-graph'},location.origin);
+});
+
+window.addEventListener('message',async event => {
+  if (window.parent === window || event.origin !== location.origin || event.source !== window.parent
+      || event.data?.type !== 'shot:show-orders') return;
+  try {
+    await refresh();
+    if (event.data.filename) {
+      const record = records.extracts.find(item => item.data.__shot_filename === event.data.filename);
+      if (!record) throw new Error('추출 히스토리에서 기록을 찾지 못했습니다.');
+      showTab('extracts', record.id);
+    } else if (tab === 'orders') await window.erpUi.activate();
+  } catch (error) { notice(error.message,true); }
+});
 byId('add-customer').addEventListener('click',() => openCustomer());
 search.addEventListener('input',render);
 byId('import-extract').addEventListener('click',() => {

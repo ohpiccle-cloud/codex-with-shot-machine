@@ -32,6 +32,10 @@ ORDER_ASSETS = {
 }
 
 
+def order_extract_id(filename):
+    return str(uuid5(NAMESPACE_URL, 'shot-history/' + filename))
+
+
 def write_notes(path, notes):
     with NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, delete=False) as output:
         temporary = Path(output.name)
@@ -121,7 +125,8 @@ class GraphHandler(SimpleHTTPRequestHandler):
                         if match and not file.is_symlink() and file.is_file():
                             records.append({'filename': file.name, 'date': match.group(1),
                                             'number': int(match.group(2)),
-                                            'url': '/api/extractions/files/' + file.name})
+                                            'url': '/api/extractions/files/' + file.name,
+                                            'orderExtractId': order_extract_id(file.name)})
                 records.sort(key=lambda record: (record['date'], record['number']), reverse=True)
                 self.respond_json(200, {'records': records})
             except OSError:
@@ -311,7 +316,7 @@ class GraphHandler(SimpleHTTPRequestHandler):
             except ValueError:
                 self.respond_json(404, {'error': '추출 히스토리에서 파일을 찾을 수 없습니다.'})
                 return
-            body = json.dumps({'filename': filename, 'id': str(uuid5(NAMESPACE_URL, 'shot-history/' + filename))})
+            body = json.dumps({'filename': filename, 'id': order_extract_id(filename)})
         request = {'method': self.command, 'url': f'http://{host}' + path[len('/orders'):],
                    'headers': headers, 'body': body}
         node = shutil.which('node')
