@@ -1,7 +1,7 @@
 """Open the local pressure graph using only the Python standard library."""
 
 import argparse
-from datetime import date
+from datetime import date, datetime
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import os
@@ -45,6 +45,16 @@ def read_record_text(path):
         return path.read_text(encoding='utf-8')
     except FileNotFoundError:
         return None
+
+
+def history_time(image):
+    started_at = read_record_text(image.with_suffix('.started-at'))
+    if started_at:
+        try:
+            return datetime.fromisoformat(started_at).timestamp()
+        except (ValueError, OverflowError):
+            pass
+    return image.stat().st_mtime
 
 
 def write_notes(path, notes):
@@ -136,10 +146,11 @@ class GraphHandler(SimpleHTTPRequestHandler):
                         if match and not file.is_symlink() and file.is_file():
                             records.append({'filename': file.name, 'date': match.group(1),
                                             'number': int(match.group(2)),
+                                            'timestamp': history_time(file),
                                             'title': read_record_text(file.with_suffix('.title')) or None,
                                             'url': '/api/extractions/files/' + file.name,
                                             'orderExtractId': order_extract_id(file.name)})
-                records.sort(key=lambda record: (record['date'], record['number']), reverse=True)
+                records.sort(key=lambda record: (record['date'], record['timestamp'], record['number']), reverse=True)
                 self.respond_json(200, {'records': records})
             except OSError:
                 self.respond_json(500, {'error': 'data 폴더를 읽지 못했습니다. 폴더 접근 권한을 확인해주세요.'})
@@ -209,6 +220,11 @@ class GraphHandler(SimpleHTTPRequestHandler):
             if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', extraction_date):
                 raise ValueError('Invalid date')
             date.fromisoformat(extraction_date)
+            started_at = self.headers.get('X-Shot-Started-At')
+            if started_at is not None:
+                if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z', started_at):
+                    raise ValueError('Invalid start time')
+                started_at = datetime.fromisoformat(started_at[:-1] + '+00:00').isoformat()
             length = int(self.headers.get('Content-Length', '0'))
             if not 0 < length <= 16 * 1024 * 1024:
                 raise ValueError('Invalid image size')
@@ -246,8 +262,12 @@ class GraphHandler(SimpleHTTPRequestHandler):
                     output.write(image)
                 if notes is not None:
                     write_notes(target.with_suffix('.txt'), notes)
+                if started_at is not None:
+                    write_notes(target.with_suffix('.started-at'), started_at)
             except OSError:
                 target.unlink(missing_ok=True)
+                if started_at is not None and notes is not None:
+                    target.with_suffix('.txt').unlink(missing_ok=True)
                 raise
         except OSError:
             self.respond_json(500, {'error': 'data 폴더의 쓰기 권한과 디스크 여유 공간을 확인해주세요.'})

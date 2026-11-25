@@ -70,14 +70,20 @@ async function refresh() {
     title: record.title || record.filename.replace(/\.png$/, ''),
     source: record.filename,
     created_at: record.date,
+    history: record,
     data: { __shot_filename: record.filename },
     historyOnly: true,
   }));
   const savedExtracts = stored.extracts.map(record => {
     const local = historyByFile.get(record.data.__shot_filename);
-    return local ? { ...record, title: local.title || record.title } : record;
+    return local ? { ...record, title: local.title || record.title, history: local } : record;
   });
-  records = { ...stored, extracts: [...historyOnly, ...savedExtracts] };
+  const sortDate = record => record.history?.date ?? record.created_at.slice(0,10);
+  const sortTime = record => record.history?.timestamp ?? Date.parse(record.created_at) / 1000;
+  const ordered = [...historyOnly, ...savedExtracts].sort((a,b) =>
+    sortDate(b).localeCompare(sortDate(a)) || sortTime(b) - sortTime(a)
+    || (b.history?.number ?? 0) - (a.history?.number ?? 0));
+  records = { ...stored, extracts: ordered };
   render();
 }
 
@@ -157,9 +163,9 @@ function render() {
 
 function renderDetail(detail, record, customerView) {
   const header = node('div',undefined,'detail-head');
-  header.append(node('h2',customerView ? record.name : record.title));
   detail.append(header);
   if (customerView) {
+    header.append(node('h2',record.name));
     const actions = node('div',undefined,'actions');
     actions.append(button('이 고객의 주문',() => showRelatedOrders('customer',record.id)));
     actions.append(button('고객 정보 수정',() => openCustomer(record)));
@@ -175,11 +181,11 @@ function renderDetail(detail, record, customerView) {
     }
     detail.append(data);
   } else {
-    header.append(button('관련 주문 보기',() => showRelatedOrders('extract',record.id)));
     detail.append(node('p',record.source ? record.source + ' · ' + record.created_at.slice(0,10) : record.created_at.slice(0,10),'muted'));
     const filename = record.data.__shot_filename;
     const localGraph = typeof filename === 'string' && /^\d{4}-\d{2}-\d{2}_\d+\.png$/.test(filename);
-    detail.append(extractTitleEditor(record, localGraph ? filename : null));
+    header.append(extractTitleEditor(record, localGraph ? filename : null),
+      button('관련 주문 보기',() => showRelatedOrders('extract',record.id)));
     if (localGraph || record.data.__erp_png) {
       const image = node('img',undefined,'extract-image');
       image.src = localGraph ? '/api/extractions/files/' + filename : pngUrl(record.data.__erp_png);
@@ -225,21 +231,39 @@ function renderDetail(detail, record, customerView) {
 }
 
 function extractTitleEditor(record, filename) {
-  const editor = node('details');
+  const editor = node('div',undefined,'record-title-editor');
+  const heading = node('h2');
   const form = node('form',undefined,'actions');
-  const label = node('label','기록 제목');
   const input = node('input');
   input.type = 'text';
-  input.value = record.title;
+  input.setAttribute('aria-label','기록 제목');
   input.maxLength = filename ? 120 : 240;
   input.required = !filename;
-  label.append(input);
+  const title = button(record.title,() => {
+    input.value = record.title;
+    heading.hidden = true;
+    form.hidden = false;
+    input.focus();
+    input.select();
+  },'editable-title');
+  title.title = '클릭하여 제목 수정';
+  heading.append(title);
   const save = node('button','제목 저장');
   save.type = 'submit';
-  form.append(label,save);
-  editor.append(node('summary','제목 수정'),form);
+  function cancel() {
+    form.hidden = true;
+    heading.hidden = false;
+    title.focus();
+  }
+  form.append(input,save,button('취소',cancel));
+  form.hidden = true;
+  form.addEventListener('keydown',event => {
+    if (event.key === 'Escape') cancel();
+  });
+  editor.append(heading,form);
   form.addEventListener('submit',async event => {
     event.preventDefault();
+    if (save.disabled) return;
     save.disabled = true;
     try {
       if (filename) {

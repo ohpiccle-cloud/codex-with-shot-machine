@@ -261,7 +261,8 @@ function createRecordImage() {
 $('download').addEventListener('click', async () => {
   if ($('download').disabled) return;
   saving = true;
-  const date = extractionDate(session.startedDate);
+  const startedDate = session.startedDate;
+  const date = extractionDate(startedDate);
   $('save-status').textContent = '그래프와 메모를 저장하고 있습니다…';
   refresh();
   try {
@@ -275,6 +276,7 @@ $('download').addEventListener('click', async () => {
         'Content-Type': 'image/png',
         'X-Shot-Save': '1',
         'X-Shot-Notes': encodeURIComponent(notes),
+        'X-Shot-Started-At': startedDate.toISOString(),
       },
       body: blob,
     });
@@ -343,8 +345,10 @@ function historyDefaultTitle(record) {
 async function showHistoryRecord(record) {
   const preview = { filename: record.filename, url: `/api/extractions/notes/${encodeURIComponent(record.filename)}` };
   activePreview = preview;
-  $('preview-title').textContent = record.title || historyDefaultTitle(record);
-  $('history-record-title').value = record.title ?? '';
+  preview.title = record.title;
+  $('edit-record-title').textContent = record.title || historyDefaultTitle(record);
+  $('preview-title').hidden = false;
+  $('history-title-form').hidden = true;
   $('history-record-title').placeholder = historyDefaultTitle(record);
   $('history-title-form').querySelector('button').disabled = false;
   $('history-title-status').textContent = '';
@@ -399,25 +403,49 @@ $('history-notes-save').addEventListener('click', async () => {
   }
 });
 
+function closeTitleEditor() {
+  $('history-title-form').hidden = true;
+  $('preview-title').hidden = false;
+  $('edit-record-title').focus();
+}
+
+$('edit-record-title').addEventListener('click', () => {
+  const input = $('history-record-title');
+  input.value = activePreview?.title || input.placeholder;
+  $('history-title-status').textContent = '';
+  $('preview-title').hidden = true;
+  $('history-title-form').hidden = false;
+  input.focus();
+  input.select();
+});
+$('cancel-record-title').addEventListener('click', closeTitleEditor);
+$('history-title-form').addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  event.preventDefault();
+  closeTitleEditor();
+});
 $('history-title-form').addEventListener('submit', async event => {
   event.preventDefault();
   const preview = activePreview;
   if (!preview) return;
   const input = $('history-record-title');
   const submit = event.currentTarget.querySelector('button');
+  if (submit.disabled) return;
   submit.disabled = true;
   try {
+    const title = input.value.trim();
     const response = await fetch('/api/extractions/title/' + encodeURIComponent(preview.filename), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Shot-Save': '1' },
-      body: JSON.stringify(input.value),
+      body: JSON.stringify(title === input.placeholder ? '' : title),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
     if (activePreview === preview) {
-      $('preview-title').textContent = result.title || input.placeholder;
-      input.value = result.title ?? '';
+      preview.title = result.title;
+      $('edit-record-title').textContent = result.title || input.placeholder;
       $('history-title-status').textContent = '제목을 저장했습니다.';
+      if (!$('history-title-form').hidden) closeTitleEditor();
     }
     await loadHistory();
   } catch (error) {

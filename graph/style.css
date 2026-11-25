@@ -48,7 +48,10 @@ kbd { background: #29384c; border: 1px solid #42526a; padding: 2px 6px; border-r
 @media (max-width: 650px) { main { padding: 20px 12px; } .metrics { gap: 8px; } .metrics > div { padding: 14px 10px; } .metrics strong { font-size: 24px; } #state { font-size: 18px; } canvas { height: 320px; } }
 .program-actions { flex-wrap: wrap; justify-content: flex-end; }
 #history-preview .program-actions { justify-content: flex-start; }
-.record-title-form input { max-width: 100%; width: 32ch; padding: 10px; border: 1px solid #42526a; border-radius: 8px; font: inherit; }
-.record-title-form button { margin-top: 6px; }
+.preview-title-area { min-width: 0; }
+.editable-title { border: 0; background: transparent; color: inherit; font: inherit; padding: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.editable-title:hover { text-decoration: underline; }
+.record-title-form:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.record-title-form input { max-width: 100%; min-width: 0; width: 32ch; padding: 10px; border: 1px solid #42526a; border-radius: 8px; font: inherit; }
 #orders-frame { border: 0; width: 100%; height: 100vh; }
 #orders-frame:not([hidden]) { display: block; }

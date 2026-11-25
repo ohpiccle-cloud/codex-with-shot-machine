@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>추출 압력 그래프</title>
-  <link rel="stylesheet" href="style.css?v=2026-11-25-r3">
+  <link rel="stylesheet" href="style.css?v=2026-11-25-r4">
 </head>
 <body>
   <main>
     <header>
-      <div><p class="eyebrow">SHOT · PRESSURE MONITOR · v2026.11.25-r3</p><h1>추출 그래프</h1></div>
+      <div><p class="eyebrow">SHOT · PRESSURE MONITOR · v2026.11.25-r4</p><h1>추출 그래프</h1></div>
       <div class="actions program-actions">
         <button id="connect">아두이노 연결</button>
         <button id="open-orders" type="button" class="secondary">고객 주문 관리</button>
@@ -47,14 +47,19 @@
   </main>
   <iframe id="orders-frame" title="고객 주문 관리" hidden></iframe>
   <dialog id="history-preview" aria-labelledby="preview-title">
-    <div class="preview-heading"><h2 id="preview-title">추출 기록</h2><button id="preview-close" class="secondary">닫기</button></div>
+    <div class="preview-heading">
+      <div class="preview-title-area">
+        <h2 id="preview-title"><button id="edit-record-title" class="editable-title" type="button" title="클릭하여 제목 수정">추출 기록</button></h2>
+        <form id="history-title-form" class="record-title-form" hidden>
+          <input id="history-record-title" type="text" maxlength="120" aria-label="기록 제목">
+          <button type="submit">제목 저장</button>
+          <button id="cancel-record-title" type="button" class="secondary">취소</button>
+        </form>
+      </div>
+      <button id="preview-close" class="secondary">닫기</button>
+    </div>
     <p id="preview-status" class="note" role="status"></p>
-    <form id="history-title-form" class="memo record-title-form">
-      <label for="history-record-title">기록 제목</label>
-      <input id="history-record-title" type="text" maxlength="120">
-      <button type="submit">제목 저장</button>
-      <p id="history-title-status" class="note" role="status"></p>
-    </form>
+    <p id="history-title-status" class="note" role="status"></p>
     <section class="memo">
       <label for="history-notes">추출 메모</label>
       <textarea id="history-notes" rows="4" maxlength="1000" disabled></textarea>
@@ -67,6 +72,6 @@
       <button id="preview-order" class="secondary" type="button">주문 관리에서 보기</button>
     </div>
   </dialog>
-  <script type="module" src="app.mjs?v=2026-11-25-r3"></script>
+  <script type="module" src="app.mjs?v=2026-11-25-r4"></script>
 </body>
 </html>

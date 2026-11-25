@@ -1,6 +1,7 @@
 import concurrent.futures
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -30,8 +31,10 @@ class StorageTests(unittest.TestCase):
         self.server.server_close()
         self.temporary.cleanup()
 
-    def save(self, date='2026-10-16', origin=None, image=PNG):
+    def save(self, date='2026-10-16', origin=None, image=PNG, started_at=None):
         headers = {'Content-Type': 'image/png', 'X-Shot-Save': '1', 'Origin': origin or self.url}
+        if started_at is not None:
+            headers['X-Shot-Started-At'] = started_at
         request = urllib.request.Request(self.url + '/api/extractions?date=' + date, data=image, headers=headers)
         with urllib.request.urlopen(request, timeout=5) as response:
             return json.load(response)
@@ -107,7 +110,9 @@ class StorageTests(unittest.TestCase):
         self.directory.mkdir()
         for filename in ['2026-10-16_002.png', '2026-10-17_001.png',
                          '2026-10-16_1000.png', '2026-10-16_999.png', 'other.png', '.gitkeep']:
-            (self.directory / filename).write_bytes(PNG)
+            path = self.directory / filename
+            path.write_bytes(PNG)
+            os.utime(path, (1700000000, 1700000000))
         records = self.history()
         self.assertEqual([r['filename'] for r in records], [
             '2026-10-17_001.png', '2026-10-16_1000.png', '2026-10-16_999.png', '2026-10-16_002.png'])
@@ -116,6 +121,14 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(response.read(), PNG)
         self.save('2026-10-18')
         self.assertEqual(self.history()[0]['filename'], '2026-10-18_001.png')
+
+    def test_extraction_start_time_controls_sort_even_when_saved_out_of_order(self):
+        latest = self.save(started_at='2026-10-16T09:20:00.123Z')
+        earlier = self.save(started_at='2026-10-16T09:10:00.456Z')
+        records = self.history()
+        self.assertEqual([row['filename'] for row in records],
+                         [Path(latest['path']).name, Path(earlier['path']).name])
+        self.assertGreater(records[0]['timestamp'], records[1]['timestamp'])
 
     def test_history_does_not_expose_other_files_or_symlinks(self):
         self.directory.mkdir()

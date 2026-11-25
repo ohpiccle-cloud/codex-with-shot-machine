@@ -20,6 +20,10 @@ button:hover:not(:disabled),summary:hover,.graph-link:hover{background:var(--sof
 .graph-link{display:inline-flex;align-items:center;gap:.45rem;text-decoration:none}
 .graph-link-icon{display:block;position:relative;width:1em;height:1em;border:solid currentColor;border-width:0 0 1px 1px;color:var(--brand)}
 .graph-link-icon::before{content:"";position:absolute;inset:0 0 2px 2px;background:currentColor;clip-path:polygon(0 83%,38% 39%,64% 58%,90% 12%,100% 24%,68% 76%,41% 57%,9% 95%)}
+.record-title-editor{min-width:0}
+.record-title-editor .editable-title{border:0;background:transparent;color:inherit;font:inherit;padding:0;text-align:left;white-space:normal;overflow-wrap:anywhere}
+.record-title-editor .editable-title:hover{text-decoration:underline}
+.record-title-editor input{min-width:0;max-width:100%}
 button:disabled{opacity:.55;cursor:default}
 .primary{color:#fff;background:var(--brand);border-color:var(--brand)}
 .primary:hover:not(:disabled){background:#103c7a}
