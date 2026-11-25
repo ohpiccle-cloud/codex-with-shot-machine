@@ -4,13 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>추출 압력 그래프</title>
-  <link rel="stylesheet" href="style.css?v=2026-11-18">
+  <link rel="stylesheet" href="style.css?v=2026-11-25">
 </head>
 <body>
   <main>
     <header>
-      <div><p class="eyebrow">SHOT · PRESSURE MONITOR · v2026.11.18</p><h1>추출 그래프</h1></div>
-      <button id="connect">아두이노 연결</button>
+      <div><p class="eyebrow">SHOT · PRESSURE MONITOR · v2026.11.25</p><h1>추출 그래프</h1></div>
+      <div class="actions program-actions">
+        <button id="connect">아두이노 연결</button>
+        <a class="image-link" href="/orders/" target="_blank" rel="noopener">고객 주문 관리</a>
+      </div>
     </header>
     <p id="connection" role="status">USB로 보드를 연결한 뒤 아두이노 연결을 누르세요.</p>
     <div class="workspace">
@@ -52,8 +55,11 @@
       <button id="history-notes-save" type="button" disabled>메모 저장</button>
     </section>
     <img id="preview-image" alt="저장된 추출 그래프와 메모">
-    <a id="preview-download" class="image-link" download>원본 이미지 다운로드</a>
+    <div class="actions program-actions">
+      <a id="preview-download" class="image-link" download>원본 이미지 다운로드</a>
+      <a id="preview-order" class="image-link" target="_blank" rel="noopener">주문 관리로 가져오기</a>
+    </div>
   </dialog>
-  <script type="module" src="app.mjs?v=2026-11-18"></script>
+  <script type="module" src="app.mjs?v=2026-11-25"></script>
 </body>
 </html>

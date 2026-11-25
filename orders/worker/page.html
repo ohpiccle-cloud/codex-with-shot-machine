@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>주문 관리 ERP</title>
+<link rel="stylesheet" href="/orders/app.css">
+<link rel="stylesheet" href="/orders/erp.css">
+<link rel="stylesheet" href="/orders/erp-service.css">
+<script src="/orders/app.js" defer></script>
+<script src="/orders/erp-service.js" defer></script>
+<script src="/orders/erp.js" defer></script>
+</head>
+<body>
+<header><div class="wrap top">
+  <div><h1>주문 관리 ERP</h1><p>주문, 출고 로트, 고객 사후 관리를 한곳에서 확인하세요.</p></div>
+  <div class="actions">
+    <a href="/">추출 그래프</a>
+    <button id="import-extract" class="primary" type="button">추출 데이터 추가</button>
+    <details id="data-menu"><summary>백업 관리</summary><div class="menu">
+      <button id="backup" type="button">전체 내보내기</button>
+      <button id="restore" type="button">백업 불러오기</button>
+    </div></details>
+    <input id="backup-file" type="file" accept=".json,application/json" hidden>
+  </div>
+</div></header>
+<main class="wrap">
+  <p id="notice" role="status" hidden></p>
+  <nav class="tabs" aria-label="업무 메뉴">
+    <button id="order-tab" type="button" aria-pressed="true">주문</button>
+    <button id="customer-tab" type="button" aria-pressed="false">고객 <span id="customer-count">0</span></button>
+    <button id="extract-tab" type="button" aria-pressed="false">추출 기록 <span id="extract-count">0</span></button>
+  </nav>
+  <div class="workspace" id="records-view" hidden>
+    <section class="panel side" aria-labelledby="list-title">
+      <div class="side-head">
+        <div class="section-head"><h2 id="list-title">고객 목록</h2><button id="add-customer" type="button">고객 등록</button></div>
+        <input id="search" type="search" aria-label="고객 이름 또는 연락처 검색" placeholder="이름 또는 연락처 검색">
+      </div>
+      <div id="list"></div>
+    </section>
+    <section class="panel detail" id="detail" aria-label="선택한 기록 상세"></section>
+  </div>
+  <section id="erp-view" aria-label="주문 관리" hidden>
+  <dl class="erp-overview" aria-label="전체 주문 현황">
+    <div><dt>전체 주문</dt><dd id="erp-total-count">0건</dd></div>
+    <div><dt>미결제 금액</dt><dd id="erp-open-payment">0원</dd></div>
+    <div><dt>출고 대기</dt><dd id="erp-open-shipping">0건</dd></div>
+    <div><dt>주문 합계</dt><dd id="erp-order-total">0원</dd></div>
+  </dl>
+  <div class="erp-workspace">
+    <section class="panel erp-list-panel" aria-labelledby="erp-list-title">
+      <div class="erp-list-controls">
+        <div class="section-head"><h2 id="erp-list-title">주문 목록</h2><button id="erp-add-order" class="primary" type="button">주문 등록</button></div>
+        <input id="erp-search" type="search" aria-label="주문 검색" placeholder="주문번호, 고객, 상품, 로트 검색">
+        <div class="erp-scope" id="erp-scope" hidden></div>
+        <details class="erp-filters"><summary>상세 필터</summary>
+          <div class="erp-fields">
+            <label>시작일<input type="date" id="erp-date-from"></label>
+            <label>종료일<input type="date" id="erp-date-to"></label>
+            <label>주문 상태<select id="erp-status-filter"></select></label>
+            <label>결제 상태<select id="erp-payment-filter"></select></label>
+            <label>출고 상태<select id="erp-shipping-filter"></select></label>
+            <div class="erp-filter-actions"><button id="erp-reset" type="button">초기화</button></div>
+          </div>
+        </details>
+        <p id="erp-match-count" class="muted" role="status"></p>
+      </div>
+      <div id="erp-list"></div>
+    </section>
+    <section class="panel detail erp-detail" id="erp-detail" aria-label="선택한 주문 상세" tabindex="-1"></section>
+  </div>
+</section>
+<dialog id="erp-order-dialog" class="erp-dialog" aria-labelledby="erp-order-dialog-title">
+  <form id="erp-order-form">
+    <h2 id="erp-order-dialog-title">주문 등록</h2>
+    <div class="erp-fields" id="erp-order-fields"></div>
+    <section class="erp-form-section" aria-labelledby="erp-order-items-title">
+      <div class="section-head"><h3 id="erp-order-items-title">주문 상품</h3><button type="button" id="erp-add-line">상품 추가</button></div>
+      <div id="erp-lines"></div>
+    </section>
+    <div class="erp-form-totals" id="erp-form-totals" aria-live="polite"></div>
+    <p class="form-error" role="alert" hidden></p>
+    <div class="actions"><button id="erp-close-order" type="button">닫기</button><button id="erp-save-order" class="primary" type="submit">주문 저장</button></div>
+  </form>
+</dialog>
+
+</main>
+<dialog id="customer-dialog" aria-labelledby="customer-title">
+  <form id="customer-form">
+    <h2 id="customer-title">고객 등록</h2>
+    <label>고객 이름<input name="name" required maxlength="100" autofocus></label>
+    <label>연락처<input name="phone" type="tel" maxlength="80"></label>
+    <label>주소<textarea name="address" rows="2" maxlength="500"></textarea></label>
+    <p class="form-error" role="alert" hidden></p>
+    <div class="actions"><button data-close type="button">닫기</button><button class="primary" type="submit">고객 저장</button></div>
+  </form>
+</dialog>
+<dialog id="extract-dialog" aria-labelledby="extract-title">
+  <form id="extract-form">
+    <h2 id="extract-title">추출 데이터 추가</h2>
+    <p class="muted">PNG(최대 768KiB), CSV, JSON 파일을 추가할 수 있습니다. CSV는 첫 행을 항목 이름으로 사용합니다.</p>
+    <label>파일 선택<input id="extract-file" type="file" accept=".png,.csv,.json,image/png,text/csv,application/json"></label>
+    <label>기록 이름 또는 이름 접두사<input name="title" maxlength="200" placeholder="예: 11월 생산 기록"></label>
+    <label>CSV 또는 JSON 내용<textarea id="extract-text" name="text" rows="6" placeholder='{"상품명":"음료 A","로트":"2026-001"}' spellcheck="false"></textarea></label>
+    <div id="import-preview" hidden><h3 id="preview-title"></h3><img id="preview-image" class="extract-image" alt="추출 그래프 미리보기" hidden><pre id="preview-data"></pre></div>
+    <p class="form-error" role="alert" hidden></p>
+    <div class="actions">
+      <button data-close type="button">닫기</button><button id="preview" type="button">미리보기</button><button class="primary" id="save-extract" type="submit" disabled>추출 기록 저장</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="link-dialog" aria-labelledby="link-title">
+  <form id="link-form">
+    <h2 id="link-title">추출 기록 연결</h2>
+    <p class="muted" id="link-customer"></p>
+    <label>추출 기록<select name="extract_id" required></select></label>
+    <div class="form-grid">
+      <label>연결 날짜<input name="linked_on" type="date" required></label>
+      <label>수량<input name="quantity" type="number" min="1" max="1000000" step="1"></label>
+    </div>
+    <label>연결 메모<textarea name="note" maxlength="1000" rows="2"></textarea></label>
+    <p class="form-error" role="alert" hidden></p>
+    <div class="actions"><button data-close type="button">닫기</button><button class="primary" type="submit">연결 저장</button></div>
+  </form>
+</dialog>
+<script type="module" src="/window.mjs"></script>
+</body>
+</html>

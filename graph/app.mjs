@@ -303,6 +303,7 @@ async function showHistoryRecord(record, title) {
   $('preview-image').src = record.url;
   $('preview-download').href = record.url;
   $('preview-download').download = record.filename;
+  $('preview-order').href = '/orders/?shot=' + encodeURIComponent(record.filename);
   $('history-notes').value = '';
   $('history-notes').disabled = true;
   $('history-notes-save').disabled = true;

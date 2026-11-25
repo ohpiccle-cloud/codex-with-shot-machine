@@ -15,6 +15,7 @@ from tempfile import NamedTemporaryFile
 import time
 import sys
 import webbrowser
+from uuid import NAMESPACE_URL, uuid5
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
@@ -23,6 +24,12 @@ DATA_DIRECTORY = Path(__file__).resolve().parent / 'data'
 RECORD_NAME = re.compile(r'(\d{4}-\d{2}-\d{2})_(\d+)\.png')
 NOTES_ROUTE = '/api/extractions/notes/'
 MAX_NOTES_LENGTH = 1000
+ORDERS_DIRECTORY = Path(__file__).resolve().parent / 'orders'
+ORDER_ASSETS = {
+    '/orders/': 'page.html',
+    **{'/orders/' + name: name for name in (
+        'app.js', 'app.css', 'erp.js', 'erp.css', 'erp-service.js', 'erp-service.css')},
+}
 
 
 def write_notes(path, notes):
@@ -85,6 +92,22 @@ class GraphHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path in ORDER_ASSETS:
+            file = ORDERS_DIRECTORY / 'worker' / ORDER_ASSETS[path]
+            content = file.read_bytes()
+            content_type = {'.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript'}[file.suffix]
+            self.send_response(200)
+            self.send_header('Content-Type', content_type + '; charset=utf-8')
+            self.send_header('Content-Length', str(len(content)))
+            self.send_header('Content-Security-Policy',
+                             "default-src 'none'; script-src 'self'; style-src 'self'; "
+                             "connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'")
+            self.end_headers()
+            self.wfile.write(content)
+            return
+        if path.startswith('/orders/api/'):
+            self.order_api(path)
+            return
         directory = self.server.data_directory
         if path.startswith(NOTES_ROUTE):
             self.record_notes(path)
@@ -131,6 +154,9 @@ class GraphHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         address = urlsplit(self.path)
+        if address.path.startswith('/orders/api/'):
+            self.order_api(address.path)
+            return
         if (address.path not in ('/api/extractions', '/api/window/open', '/api/window/close')
                 and not address.path.startswith(NOTES_ROUTE)):
             self.respond_json(404, {'error': '저장 경로를 찾을 수 없습니다.'})
@@ -249,6 +275,60 @@ class GraphHandler(SimpleHTTPRequestHandler):
             self.respond_json(500, {'error': 'data 폴더의 메모 파일에 접근할 수 없습니다.'})
             return
         self.respond_json(200, {'notes': notes})
+
+    def order_api(self, path):
+        host = self.headers.get('Host')
+        port = self.server.server_port
+        origin = self.headers.get('Origin')
+        if (host not in (f'127.0.0.1:{port}', f'localhost:{port}')
+                or (self.command == 'POST' and origin != f'http://{host}')):
+            self.respond_json(403, {'error': '요청 출처를 확인할 수 없습니다.'})
+            return
+        headers = {}
+        body = None
+        if self.command == 'POST':
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 8_000_000 or (
+                        self.headers.get('Content-Type', '').split(';')[0] != 'application/json'):
+                    raise ValueError()
+                self.connection.settimeout(15)
+                body = self.rfile.read(length).decode('utf-8')
+            except (ValueError, OSError):
+                self.respond_json(400, {'error': '8MB 이하의 JSON 요청이 필요합니다.'})
+                return
+            headers = {'origin': origin, 'content-type': 'application/json'}
+        directory = self.server.data_directory
+        if path == '/orders/api/shot-extract' and self.command == 'POST':
+            try:
+                request = json.loads(body)
+                filename = request.get('filename') if isinstance(request, dict) else None
+                if not isinstance(filename, str) or not RECORD_NAME.fullmatch(filename):
+                    raise ValueError()
+                image = directory / filename
+                if image.is_symlink() or not image.is_file():
+                    raise ValueError()
+            except ValueError:
+                self.respond_json(404, {'error': '추출 히스토리에서 파일을 찾을 수 없습니다.'})
+                return
+            body = json.dumps({'filename': filename, 'id': str(uuid5(NAMESPACE_URL, 'shot-history/' + filename))})
+        request = {'method': self.command, 'url': f'http://{host}' + path[len('/orders'):],
+                   'headers': headers, 'body': body}
+        node = shutil.which('node')
+        if node is None:
+            self.respond_json(503, {'error': '주문 관리를 사용하려면 Node.js 24 LTS를 설치해주세요.'})
+            return
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            result = subprocess.run(
+                [node, str(ORDERS_DIRECTORY / 'local.mjs'), str(directory / 'orders.sqlite3')],
+                input=json.dumps(request), capture_output=True, encoding='utf-8', timeout=30, check=True,
+            )
+            response = json.loads(result.stdout)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            self.respond_json(503, {'error': '주문 저장소를 열지 못했습니다. Node.js 24와 data 폴더 권한을 확인해주세요.'})
+            return
+        self.respond_json(response['status'], response['body'])
 
 
 def create_server(data_directory=DATA_DIRECTORY, port=0):

@@ -1,0 +1,30 @@
+.erp-service { display:grid; gap:1.2rem; margin-top:1.35rem; }
+.erp-service-section { min-width:0; border-top:1px solid var(--line); padding-top:1rem; }
+.erp-service-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.55rem; }
+.erp-service-heading h3 { font-size:1.05rem; }
+.erp-service-heading button { font-size:.9rem; }
+.erp-service-list { list-style:none; margin:.6rem 0 0; padding:0; }
+.erp-service-entry { display:flex; justify-content:space-between; align-items:flex-start; gap:.8rem; padding:.75rem 0; border-bottom:1px solid var(--line); }
+.erp-service-entry:last-child { border-bottom:0; padding-bottom:0; }
+.erp-service-entry-body { min-width:0; flex:1; }
+.erp-service-entry-title { display:flex; gap:.4rem .65rem; align-items:center; flex-wrap:wrap; font-weight:700; overflow-wrap:anywhere; }
+.erp-service-entry-title h4 { font-size:1rem; margin:0; }
+.erp-service-entry-title button { white-space:normal; }
+.erp-service-entry-meta { color:var(--muted); margin-top:.2rem; font-size:.88rem; }
+.erp-service-entry-note { min-width:0; margin-top:.25rem; white-space:pre-wrap; }
+.erp-service-entry-note strong { margin-right:.35rem; }
+.erp-service-actions { flex:0 0 auto; }
+.erp-service-actions button { font-size:.88rem; }
+.erp-service-tag { padding:.15rem .5rem; border:1px solid #cbdaf0; border-radius:999px; color:#224774; background:#edf4fb; font-size:.82rem; font-weight:650; white-space:nowrap; }
+.erp-service-tag[data-state="resolved"] { color:#205b42; background:#ebf6ef; border-color:#bfdecc; }
+.erp-service-tag[data-state="in_progress"] { color:#75460e; background:#fff5df; border-color:#ecd6a8; }
+.erp-service-empty { color:var(--muted); padding:.65rem 0 0; }
+.erp-service-dialog form { gap:.8rem; }
+.erp-service-dialog .erp-service-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; }
+.erp-service-dialog .erp-service-full { grid-column:1/-1; }
+.erp-service-dialog .erp-service-help { font-size:.89rem; color:var(--muted); font-weight:400; }
+.erp-service-dialog .form-error { line-height:1.5; }
+@media(max-width:460px) {
+  .erp-service-dialog .erp-service-fields { grid-template-columns:minmax(0,1fr); }
+  .erp-service-entry { flex-wrap:wrap; }
+}
