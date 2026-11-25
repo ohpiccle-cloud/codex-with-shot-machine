@@ -23,7 +23,9 @@ GRAPH_DIRECTORY = Path(__file__).resolve().parent / 'graph'
 DATA_DIRECTORY = Path(__file__).resolve().parent / 'data'
 RECORD_NAME = re.compile(r'(\d{4}-\d{2}-\d{2})_(\d+)\.png')
 NOTES_ROUTE = '/api/extractions/notes/'
+TITLE_ROUTE = '/api/extractions/title/'
 MAX_NOTES_LENGTH = 1000
+MAX_TITLE_LENGTH = 120
 ORDERS_DIRECTORY = Path(__file__).resolve().parent / 'orders'
 ORDER_ASSETS = {
     '/orders/': 'page.html',
@@ -34,6 +36,15 @@ ORDER_ASSETS = {
 
 def order_extract_id(filename):
     return str(uuid5(NAMESPACE_URL, 'shot-history/' + filename))
+
+
+def read_record_text(path):
+    if path.is_symlink():
+        return None
+    try:
+        return path.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        return None
 
 
 def write_notes(path, notes):
@@ -113,8 +124,8 @@ class GraphHandler(SimpleHTTPRequestHandler):
             self.order_api(path)
             return
         directory = self.server.data_directory
-        if path.startswith(NOTES_ROUTE):
-            self.record_notes(path)
+        if path.startswith((NOTES_ROUTE, TITLE_ROUTE)):
+            self.record_text(path)
             return
         if path == '/api/extractions':
             try:
@@ -125,6 +136,7 @@ class GraphHandler(SimpleHTTPRequestHandler):
                         if match and not file.is_symlink() and file.is_file():
                             records.append({'filename': file.name, 'date': match.group(1),
                                             'number': int(match.group(2)),
+                                            'title': read_record_text(file.with_suffix('.title')) or None,
                                             'url': '/api/extractions/files/' + file.name,
                                             'orderExtractId': order_extract_id(file.name)})
                 records.sort(key=lambda record: (record['date'], record['number']), reverse=True)
@@ -163,7 +175,7 @@ class GraphHandler(SimpleHTTPRequestHandler):
             self.order_api(address.path)
             return
         if (address.path not in ('/api/extractions', '/api/window/open', '/api/window/close')
-                and not address.path.startswith(NOTES_ROUTE)):
+                and not address.path.startswith((NOTES_ROUTE, TITLE_ROUTE))):
             self.respond_json(404, {'error': '저장 경로를 찾을 수 없습니다.'})
             return
         hosts = {'127.0.0.1:{}'.format(self.server.server_port),
@@ -174,8 +186,8 @@ class GraphHandler(SimpleHTTPRequestHandler):
                 or (origin is not None and origin not in {'http://' + host for host in hosts})):
             self.respond_json(403, {'error': '이 프로그램 화면에서만 저장할 수 있습니다.'})
             return
-        if address.path.startswith(NOTES_ROUTE):
-            self.record_notes(address.path, update=True)
+        if address.path.startswith((NOTES_ROUTE, TITLE_ROUTE)):
+            self.record_text(address.path, update=True)
             return
         if address.path.startswith('/api/window/'):
             try:
@@ -242,13 +254,17 @@ class GraphHandler(SimpleHTTPRequestHandler):
             return
         self.respond_json(201, {'path': 'data/' + filename, 'number': number})
 
-    def record_notes(self, path, update=False):
-        filename = path[len(NOTES_ROUTE):]
+    def record_text(self, path, update=False):
+        is_title = path.startswith(TITLE_ROUTE)
+        route, key, suffix, limit, label = (
+            (TITLE_ROUTE, 'title', '.title', MAX_TITLE_LENGTH, '제목') if is_title else
+            (NOTES_ROUTE, 'notes', '.txt', MAX_NOTES_LENGTH, '메모'))
+        filename = path[len(route):]
         if not RECORD_NAME.fullmatch(filename):
             self.respond_json(404, {'error': '추출 기록을 찾을 수 없습니다.'})
             return
         image = self.server.data_directory / filename
-        notes_path = image.with_suffix('.txt')
+        text_path = image.with_suffix(suffix)
         try:
             if image.is_symlink() or not image.is_file():
                 self.respond_json(404, {'error': '추출 기록을 찾을 수 없습니다.'})
@@ -261,25 +277,24 @@ class GraphHandler(SimpleHTTPRequestHandler):
                 payload = self.rfile.read(length)
                 if len(payload) != length:
                     raise ValueError('Incomplete notes')
-                notes = json.loads(payload)
-                if not isinstance(notes, str) or len(notes) > MAX_NOTES_LENGTH:
-                    raise ValueError('Invalid notes')
-                notes.encode('utf-8')
-                write_notes(notes_path, notes)
+                value = json.loads(payload)
+                if not isinstance(value, str) or len(value) > limit:
+                    raise ValueError('Invalid record text')
+                if is_title:
+                    value = value.strip()
+                    if any(char in value for char in '\r\n'):
+                        raise ValueError('Title must fit on one line')
+                value.encode('utf-8')
+                write_notes(text_path, value)
             else:
-                notes = None
-                if not notes_path.is_symlink():
-                    try:
-                        notes = notes_path.read_text(encoding='utf-8')
-                    except FileNotFoundError:
-                        pass
+                value = read_record_text(text_path)
         except ValueError:
-            self.respond_json(400, {'error': '메모 형식이나 길이를 확인해주세요.'})
+            self.respond_json(400, {'error': f'{label}의 형식이나 길이를 확인해주세요.'})
             return
         except OSError:
-            self.respond_json(500, {'error': 'data 폴더의 메모 파일에 접근할 수 없습니다.'})
+            self.respond_json(500, {'error': f'data 폴더의 {label} 파일에 접근할 수 없습니다.'})
             return
-        self.respond_json(200, {'notes': notes})
+        self.respond_json(200, {key: (value or None) if is_title else value})
 
     def order_api(self, path):
         host = self.headers.get('Host')

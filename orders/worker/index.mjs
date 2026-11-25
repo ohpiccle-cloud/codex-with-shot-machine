@@ -142,6 +142,13 @@ async function api(request, db, path, owner) {
   if (request.method === 'POST') {
     if (request.headers.get('origin') !== new URL(request.url).origin) return json({error:'요청 출처를 확인할 수 없습니다.'},403);
     const body = await payload(request);
+    if (path === '/api/rename-extract') {
+      const title = string(body.title,240,'추출 기록 제목',true).trim();
+      const result = await db.prepare('UPDATE extracts SET title=? WHERE owner_id=? AND id=?')
+        .bind(title,owner,id(body.id)).run();
+      if (!result.meta.changes) return json({error:'추출 기록을 찾을 수 없습니다.'},404);
+      return json({title});
+    }
     if (path === '/api/shot-extract') {
       const record = row('extracts', {
         id: body.id, title: body.filename.replace(/\.png$/, ''), source: body.filename,

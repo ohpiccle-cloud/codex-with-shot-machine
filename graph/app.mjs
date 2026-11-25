@@ -328,6 +328,7 @@ window.addEventListener('message', event => {
   ordersFrame.hidden = true;
   graphView.hidden = false;
   refresh();
+  void loadHistory();
   $('open-orders').focus();
 });
 $('open-orders').addEventListener('click', () => openOrders());
@@ -335,10 +336,18 @@ $('preview-order').addEventListener('click', () => {
   if (activePreview) openOrders(activePreview.filename);
 });
 
-async function showHistoryRecord(record, title) {
+function historyDefaultTitle(record) {
+  return `${record.date} · 추출 #${String(record.number).padStart(3, '0')}`;
+}
+
+async function showHistoryRecord(record) {
   const preview = { filename: record.filename, url: `/api/extractions/notes/${encodeURIComponent(record.filename)}` };
   activePreview = preview;
-  $('preview-title').textContent = title;
+  $('preview-title').textContent = record.title || historyDefaultTitle(record);
+  $('history-record-title').value = record.title ?? '';
+  $('history-record-title').placeholder = historyDefaultTitle(record);
+  $('history-title-form').querySelector('button').disabled = false;
+  $('history-title-status').textContent = '';
   $('preview-status').textContent = '';
   $('preview-image').src = record.url;
   $('preview-download').href = record.url;
@@ -390,6 +399,34 @@ $('history-notes-save').addEventListener('click', async () => {
   }
 });
 
+$('history-title-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const preview = activePreview;
+  if (!preview) return;
+  const input = $('history-record-title');
+  const submit = event.currentTarget.querySelector('button');
+  submit.disabled = true;
+  try {
+    const response = await fetch('/api/extractions/title/' + encodeURIComponent(preview.filename), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Shot-Save': '1' },
+      body: JSON.stringify(input.value),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
+    if (activePreview === preview) {
+      $('preview-title').textContent = result.title || input.placeholder;
+      input.value = result.title ?? '';
+      $('history-title-status').textContent = '제목을 저장했습니다.';
+    }
+    await loadHistory();
+  } catch (error) {
+    if (activePreview === preview) $('history-title-status').textContent = error.message;
+  } finally {
+    if (activePreview === preview) submit.disabled = false;
+  }
+});
+
 async function loadHistory() {
   const request = ++historyRequest;
   $('history-refresh').disabled = true;
@@ -406,14 +443,15 @@ async function loadHistory() {
     for (const record of result.records) {
       const button = document.createElement('button');
       button.className = 'history-card';
-      const title = `${record.date} · 추출 #${String(record.number).padStart(3, '0')}`;
+      const original = historyDefaultTitle(record);
+      const title = record.title || original;
       button.setAttribute('aria-label', `${title} 보기`);
       const image = document.createElement('img');
       image.src = record.url; image.alt = ''; image.loading = 'lazy';
       const label = document.createElement('span'); label.textContent = title;
-      const hint = document.createElement('small'); hint.textContent = '그래프 보기 · 메모 편집';
+      const hint = document.createElement('small'); hint.textContent = record.title ? original : '그래프 보기 · 제목 및 메모 편집';
       button.append(image, label, hint);
-      button.addEventListener('click', () => showHistoryRecord(record, title));
+      button.addEventListener('click', () => showHistoryRecord(record));
       list.append(button);
     }
     $('history-list').replaceChildren(list);

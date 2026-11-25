@@ -64,15 +64,20 @@ async function refresh() {
     }),
   ]);
   const registered = new Set(stored.extracts.map(record => record.id));
+  const historyByFile = new Map(history.records.map(record => [record.filename, record]));
   const historyOnly = history.records.filter(record => !registered.has(record.orderExtractId)).map(record => ({
     id: record.orderExtractId,
-    title: record.filename.replace(/\.png$/, ''),
+    title: record.title || record.filename.replace(/\.png$/, ''),
     source: record.filename,
     created_at: record.date,
     data: { __shot_filename: record.filename },
     historyOnly: true,
   }));
-  records = { ...stored, extracts: [...historyOnly, ...stored.extracts] };
+  const savedExtracts = stored.extracts.map(record => {
+    const local = historyByFile.get(record.data.__shot_filename);
+    return local ? { ...record, title: local.title || record.title } : record;
+  });
+  records = { ...stored, extracts: [...historyOnly, ...savedExtracts] };
   render();
 }
 
@@ -174,6 +179,7 @@ function renderDetail(detail, record, customerView) {
     detail.append(node('p',record.source ? record.source + ' · ' + record.created_at.slice(0,10) : record.created_at.slice(0,10),'muted'));
     const filename = record.data.__shot_filename;
     const localGraph = typeof filename === 'string' && /^\d{4}-\d{2}-\d{2}_\d+\.png$/.test(filename);
+    detail.append(extractTitleEditor(record, localGraph ? filename : null));
     if (localGraph || record.data.__erp_png) {
       const image = node('img',undefined,'extract-image');
       image.src = localGraph ? '/api/extractions/files/' + filename : pngUrl(record.data.__erp_png);
@@ -216,6 +222,45 @@ function renderDetail(detail, record, customerView) {
     links.append(row);
   }
   detail.append(links);
+}
+
+function extractTitleEditor(record, filename) {
+  const editor = node('details');
+  const form = node('form',undefined,'actions');
+  const label = node('label','기록 제목');
+  const input = node('input');
+  input.type = 'text';
+  input.value = record.title;
+  input.maxLength = filename ? 120 : 240;
+  input.required = !filename;
+  label.append(input);
+  const save = node('button','제목 저장');
+  save.type = 'submit';
+  form.append(label,save);
+  editor.append(node('summary','제목 수정'),form);
+  form.addEventListener('submit',async event => {
+    event.preventDefault();
+    save.disabled = true;
+    try {
+      if (filename) {
+        const response = await fetch('/api/extractions/title/' + encodeURIComponent(filename), {
+          method:'POST', headers:{'Content-Type':'application/json','X-Shot-Save':'1'},
+          body:JSON.stringify(input.value),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+      } else {
+        await api('rename-extract',{id:record.id,title:input.value});
+      }
+      await refresh();
+      notice('제목을 저장했습니다.');
+    } catch (error) {
+      notice(error.message,true);
+    } finally {
+      save.disabled = false;
+    }
+  });
+  return editor;
 }
 
 async function unlink(id) {
