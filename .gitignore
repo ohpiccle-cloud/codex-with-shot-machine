@@ -1,3 +1,5 @@
 __pycache__/
 data/*
 !data/.gitkeep
+sites/node_modules/
+sites/dist/

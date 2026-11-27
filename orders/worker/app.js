@@ -45,6 +45,17 @@ function formError(form, text) {
   el.hidden = !text;
 }
 
+async function copyShippingDetails(customer) {
+  const text = [customer.name, customer.phone, customer.address]
+    .map(value => value.trim()).filter(Boolean).join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    notice('받는 분 이름, 연락처, 주소를 복사했습니다.');
+  } catch {
+    notice('클립보드에 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해 주세요.',true);
+  }
+}
+
 async function api(url, body) {
   const options = body === undefined ? {} : {
     method:'POST', headers:{'content-type':'application/json'},body:JSON.stringify(body)
@@ -169,6 +180,7 @@ function renderDetail(detail, record, customerView) {
     const actions = node('div',undefined,'actions');
     actions.append(button('이 고객의 주문',() => showRelatedOrders('customer',record.id)));
     actions.append(button('고객 정보 수정',() => openCustomer(record)));
+    actions.append(button('송장용 고객 정보 복사',() => copyShippingDetails(record)));
     const add = button('추출 기록 연결',() => openLink(record),'primary');
     add.disabled = records.extracts.length === 0;
     actions.append(add);
