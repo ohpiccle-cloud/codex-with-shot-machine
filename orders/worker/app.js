@@ -76,6 +76,7 @@ async function refresh() {
   ]);
   const registered = new Set(stored.extracts.map(record => record.id));
   const historyByFile = new Map(history.records.map(record => [record.filename, record]));
+  const historyById = new Map(history.records.map(record => [record.orderExtractId, record]));
   const historyOnly = history.records.filter(record => !registered.has(record.orderExtractId)).map(record => ({
     id: record.orderExtractId,
     title: record.title || record.filename.replace(/\.png$/, ''),
@@ -86,8 +87,13 @@ async function refresh() {
     historyOnly: true,
   }));
   const savedExtracts = stored.extracts.map(record => {
-    const local = historyByFile.get(record.data.__shot_filename);
-    return local ? { ...record, title: local.title || record.title, history: local } : record;
+    const local = historyByFile.get(record.data.__shot_filename) ?? historyById.get(record.id);
+    return local ? {
+      ...record,
+      title: local.title || record.title,
+      history: local,
+      data: { ...record.data, __shot_filename: local.filename },
+    } : record;
   });
   const sortDate = record => record.history?.date ?? record.created_at.slice(0,10);
   const sortTime = record => record.history?.timestamp ?? Date.parse(record.created_at) / 1000;
