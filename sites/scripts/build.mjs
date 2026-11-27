@@ -24,7 +24,9 @@ for (const name of ['app', 'erp', 'erp-service']) {
 const assets = {};
 for (const [path, [source, type]] of Object.entries(files)) {
   let content = await readFile(new URL(source, root), 'utf8');
-  if (path === '/') content = content.replace('프로그램 폴더의 data 폴더에', '서버에');
+  if (path === '/') content = content.replace('프로그램 폴더의 data 폴더에', '서버에')
+    .replace('id="history-import" type="button" class="secondary" hidden',
+      'id="history-import" type="button" class="secondary"');
   assets[path] = [content, type];
 }
 await rm(output,{recursive:true,force:true});

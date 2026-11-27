@@ -494,6 +494,127 @@ async function loadHistory() {
 }
 
 $('history-refresh').addEventListener('click', loadHistory);
+
+const historyTransferStatus = $('history-transfer-status');
+const historyImportFile = $('history-import-file');
+const historyBundleFormat = 'shot-extraction-history';
+
+function setHistoryTransferBusy(busy) {
+  $('history-export').disabled = busy;
+  $('history-import').disabled = busy;
+}
+
+async function historyTransferFetch(path, options) {
+  const response = await fetch(path, options);
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null);
+    throw new Error(problem?.error || `요청 실패 (HTTP ${response.status})`);
+  }
+  return response;
+}
+
+function pngBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+$('history-export').addEventListener('click', async () => {
+  setHistoryTransferBusy(true);
+  historyTransferStatus.textContent = '내보낼 기록을 불러오는 중…';
+  try {
+    const { records } = await (await historyTransferFetch('/api/extractions')).json();
+    if (!records.length) {
+      historyTransferStatus.textContent = '내보낼 추출 기록이 없습니다.';
+      return;
+    }
+    const shots = [];
+    for (const record of records) {
+      historyTransferStatus.textContent = `내보내는 중 · ${shots.length + 1}/${records.length}`;
+      const filename = encodeURIComponent(record.filename);
+      const [image, memo] = await Promise.all([
+        historyTransferFetch('/api/extractions/files/' + filename).then(response => response.blob()),
+        historyTransferFetch('/api/extractions/notes/' + filename).then(response => response.json()),
+      ]);
+      shots.push({
+        filename: record.filename,
+        startedAt: new Date(record.timestamp * 1000).toISOString(),
+        title: record.title ?? null,
+        notes: memo.notes ?? null,
+        png: await pngBase64(image),
+      });
+    }
+    const blob = new Blob([JSON.stringify({format:historyBundleFormat, version:1, shots})], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '추출-데이터-' + extractionDate(new Date()) + '.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    historyTransferStatus.textContent = `추출 기록 ${shots.length}건을 내보냈습니다.`;
+  } catch (error) {
+    historyTransferStatus.textContent = `내보내지 못했습니다. ${error.message}`;
+  } finally {
+    setHistoryTransferBusy(false);
+  }
+});
+
+$('history-import').addEventListener('click', () => historyImportFile.click());
+historyImportFile.addEventListener('change', async () => {
+  const file = historyImportFile.files[0];
+  historyImportFile.value = '';
+  if (!file || $('history-import').disabled) return;
+  setHistoryTransferBusy(true);
+  let imported = 0;
+  let skipped = 0;
+  let currentFilename = '';
+  try {
+    historyTransferStatus.textContent = '파일을 확인하는 중…';
+    const bundle = JSON.parse(await file.text());
+    if (bundle?.format !== historyBundleFormat || bundle.version !== 1 || !Array.isArray(bundle.shots)) {
+      throw new Error('추출 데이터 내보내기로 저장한 JSON 파일을 선택하세요.');
+    }
+    for (const shot of bundle.shots) {
+      if (typeof shot?.filename !== 'string' || !/^\d{4}-\d{2}-\d{2}_\d{3,}\.png$/.test(shot.filename)
+          || typeof shot.startedAt !== 'string' || !Number.isFinite(Date.parse(shot.startedAt))
+          || ![shot.title, shot.notes].every(value => value === null || typeof value === 'string')
+          || (shot.title?.length ?? 0) > 120 || (shot.notes?.length ?? 0) > 1000
+          || typeof shot.png !== 'string' || !shot.png.startsWith('iVBORw0KGgo')
+          || shot.png.length > Math.ceil(16 * 1024 * 1024 / 3) * 4) {
+        throw new Error('파일에 형식이 올바르지 않은 추출 기록이 있습니다.');
+      }
+    }
+    for (const [index, shot] of bundle.shots.entries()) {
+      currentFilename = shot.filename;
+      historyTransferStatus.textContent = `불러오는 중 · ${index + 1}/${bundle.shots.length}`;
+      const headers = {'Content-Type':'image/png', 'X-Shot-Save':'1', 'X-Shot-Started-At':shot.startedAt};
+      if (shot.title !== null) headers['X-Shot-Title'] = encodeURIComponent(shot.title);
+      if (shot.notes !== null) headers['X-Shot-Notes'] = encodeURIComponent(shot.notes);
+      const response = await fetch('/api/extractions/import?filename=' + encodeURIComponent(shot.filename), {
+        method:'POST', headers, body:Uint8Array.from(atob(shot.png), char => char.charCodeAt(0)),
+      });
+      if (response.status === 409) {
+        skipped++;
+      } else if (response.ok) {
+        imported++;
+      } else {
+        const problem = await response.json().catch(() => null);
+        throw new Error(problem?.error || `요청 실패 (HTTP ${response.status})`);
+      }
+    }
+    historyTransferStatus.textContent = `불러오기 완료 · 새 기록 ${imported}건, 같은 번호여서 건너뜀 ${skipped}건`;
+  } catch (error) {
+    const location = currentFilename ? ` ${currentFilename}에서 중단했습니다.` : '';
+    historyTransferStatus.textContent = `불러오기 미완료 · 저장 ${imported}건, 건너뜀 ${skipped}건.${location} ${error.message}`;
+  } finally {
+    if (imported) await loadHistory();
+    setHistoryTransferBusy(false);
+  }
+});
+
 $('preview-close').addEventListener('click', () => previewDialog.close());
 let pointerStartedOutside = false;
 function isPreviewBackdrop(event) {

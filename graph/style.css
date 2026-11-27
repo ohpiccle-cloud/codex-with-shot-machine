@@ -8,6 +8,9 @@ main { max-width: 1550px; padding: 40px 28px; margin: auto; }
 .history-heading, .preview-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .history-heading h2, .preview-heading h2 { font-size: 18px; margin: 0; }
 .history-heading button { padding: 8px 10px; font-size: 12px; }
+.history-transfer { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.history-transfer button { min-height: 44px; white-space: normal; }
+#history-transfer-status:empty { display: none; }
 .history-list { display: grid; gap: 12px; max-height: 70vh; overflow-y: auto; }
 .history-card { display: grid; gap: 8px; width: 100%; text-align: left; padding: 10px; color: #e6edf6; background: #10161f; border-color: #2b394b; }
 .history-card:hover { border-color: #74d6bf; }

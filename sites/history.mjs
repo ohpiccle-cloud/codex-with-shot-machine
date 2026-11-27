@@ -36,21 +36,27 @@ function shotFilename(day, number) {
   return day + '_' + String(number).padStart(3, '0') + '.png';
 }
 
-async function saveShot(request, db, owner, day) {
+async function saveShot(request, db, owner, day, filename = null) {
+  const number = filename === null ? null : Number(filenamePattern.exec(filename)?.[2]);
   const date = Date.parse(day);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(date)
       || new Date(date).toISOString().slice(0, 10) !== day
       || request.headers.get('Content-Type') !== 'image/png'
-      || Number(request.headers.get('Content-Length')) > MAX_PNG) {
+      || Number(request.headers.get('Content-Length')) > MAX_PNG
+      || (filename !== null && (!Number.isSafeInteger(number) || number < 1
+        || filename !== shotFilename(day, number)))) {
     return json({error:'추출 날짜와 PNG 파일을 확인해 주세요.'}, 400);
   }
   const started = request.headers.get('X-Shot-Started-At');
   const timestamp = started === null ? Date.now() : Date.parse(started);
-  let notes;
+  let notes, title;
   try {
     const raw = request.headers.get('X-Shot-Notes');
     notes = raw === null ? null : decodeURIComponent(raw);
-    if (!Number.isFinite(timestamp) || (notes?.length ?? 0) > 1000) throw new Error();
+    const rawTitle = filename === null ? null : request.headers.get('X-Shot-Title');
+    title = rawTitle === null ? null : decodeURIComponent(rawTitle).trim() || null;
+    if (!Number.isFinite(timestamp) || (notes?.length ?? 0) > 1000
+        || (title?.length ?? 0) > 120 || (title && /[\r\n]/.test(title))) throw new Error();
   } catch {
     return json({error:'추출 시간이나 메모를 확인해 주세요.'}, 400);
   }
@@ -58,17 +64,27 @@ async function saveShot(request, db, owner, day) {
   if (image.length > MAX_PNG || !pngSignature.every((byte, index) => image[index] === byte)) {
     return json({error:'16MB 이하의 PNG 이미지가 필요합니다.'}, 400);
   }
+  const conflict = () => json({error:'같은 날짜와 번호의 기록이 이미 있습니다.'},409);
+  if (filename && await findShot(db,owner,filename)) return conflict();
   const id = crypto.randomUUID();
-  const statements = [db.prepare(
+  const header = filename ? db.prepare(
+    'INSERT INTO shot_history(owner_id,id,day,number,started_at,notes,title) VALUES (?,?,?,?,?,?,?)'
+  ).bind(owner,id,day,number,timestamp / 1000,notes,title) : db.prepare(
     'INSERT INTO shot_history(owner_id,id,day,number,started_at,notes) ' +
     'SELECT ?,?,?,COALESCE(MAX(number),0)+1,?,? FROM shot_history WHERE owner_id=? AND day=?'
-  ).bind(owner, id, day, timestamp / 1000, notes, owner, day)];
+  ).bind(owner, id, day, timestamp / 1000, notes, owner, day);
+  const statements = [header];
   for (let offset = 0; offset < image.length; offset += PNG_PART_SIZE) {
     const bytes = image.subarray(offset, offset + PNG_PART_SIZE);
     statements.push(db.prepare('INSERT INTO shot_image_parts VALUES (?,?,?,?)')
       .bind(owner, id, offset / PNG_PART_SIZE, encodeImagePart(bytes)));
   }
-  await db.batch(statements);
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    if (filename && await findShot(db,owner,filename)) return conflict();
+    throw error;
+  }
   const saved = await db.prepare('SELECT number FROM shot_history WHERE owner_id=? AND id=?').bind(owner,id).first();
   return json({ path: shotFilename(day, saved.number), number: saved.number }, 201);
 }
@@ -91,6 +107,10 @@ export async function historyApi(request, db, owner, url) {
           url: '/api/extractions/files/' + filename, orderExtractId: await orderExtractId(filename)};
       }))});
     }
+  }
+  if (path === '/api/extractions/import' && request.method === 'POST') {
+    const filename = url.searchParams.get('filename') ?? '';
+    return saveShot(request,db,owner,filenamePattern.exec(filename)?.[1] ?? '',filename);
   }
   const route = /^\/api\/extractions\/(files|title|notes)\/([^/]+)$/.exec(path);
   if (!route) return json({error:'요청을 찾을 수 없습니다.'}, 404);
