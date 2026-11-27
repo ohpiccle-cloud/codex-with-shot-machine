@@ -77,3 +77,9 @@ label{display:grid;gap:.3rem;font-weight:600;font-size:.95rem}
 pre{margin:.45rem 0 0;padding:.6rem;background:#f1f5f9;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:170px;overflow:auto}
 .extract-image{display:block;max-width:100%;height:auto;max-height:34rem;object-fit:contain;margin:.75rem 0;border:1px solid var(--line);border-radius:8px}
 @media(max-width:650px){.workspace{grid-template-columns:1fr}.panel{min-height:0}header{padding:1.35rem 0}.link-row{flex-wrap:wrap}.detail{min-height:180px}}
+@media(max-width:650px){
+  .top .actions{justify-content:flex-start}
+  .top .actions button,.top .actions summary,.graph-link,.tabs button,.detail-head .actions button{min-height:44px}
+  input,textarea,select{font-size:16px}
+  dialog{max-height:90dvh}
+}

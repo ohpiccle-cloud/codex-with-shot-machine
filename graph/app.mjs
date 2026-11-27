@@ -512,7 +512,8 @@ $('preview-image').addEventListener('error', () => {
 
 if (!('serial' in navigator) || !window.isSecureContext) {
   $('connect').disabled = true;
-  $('connection').textContent = 'PC용 Chrome 또는 Edge에서 localhost로 열어주세요. 이 브라우저에서는 USB 시리얼 연결을 지원하지 않습니다.';
+  document.body.classList.add('serial-unavailable');
+  $('connection').textContent = '저장된 추출 기록과 주문을 볼 수 있습니다. 실시간 압력 측정은 Arduino를 연결한 PC의 Chrome 또는 Edge에서 이용하세요.';
 } else {
   navigator.serial.addEventListener('connect', autoConnect);
   void autoConnect();
