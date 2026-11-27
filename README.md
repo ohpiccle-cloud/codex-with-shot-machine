@@ -144,7 +144,9 @@ USB 분리나 PC 절전으로 연결 자체가 끊긴 경우에는 수동으로 
 
 ERP의 **고객 → 고객 선택 → 송장용 고객 정보 복사**는 받는 분 이름, 연락처, 주소를 줄별로 복사합니다.
 
-배포 패키지는 Node.js로 빌드할 수 있습니다. 대상 Sites 프로젝트 ID를 `GPT_SITES_PROJECT_ID` 환경변수에 설정한 뒤 아래 명령을 실행합니다.
+Windows에서는 압축을 푼 저장소의 `Build_Sites_Zip.bat`를 실행하고 대상 GPT Sites 프로젝트 ID를 입력하면 `sites/shot-erp-gpt-sites-mobile.zip`이 생성됩니다. Node.js 24 LTS와 Python 3가 필요합니다.
+
+명령줄에서도 배포 패키지를 빌드할 수 있습니다. 대상 Sites 프로젝트 ID를 `GPT_SITES_PROJECT_ID` 환경변수에 설정한 뒤 아래 명령을 실행합니다.
 
 ```sh
 npm --prefix sites ci
